@@ -1,0 +1,21 @@
+conveyor:
+  buffer_size: 750
+  grace_period_days: 30
+  promotion_play_count: 15
+  max_skip_ratio: 0.7
+  telemetry_safety_margin_days: 7
+
+llm:
+  model: gemini-3.6-flash
+  diversity_weights:
+    exploitation: 0.60
+    adjacent: 0.25
+    exploration: 0.15
+
+downloader:
+  audio_format: "bestaudio/best"
+  preferred_codec: "opus"
+  fallback_codec: "m4a"
+  sleep_interval_min: 3
+  sleep_interval_max: 8
+  batch_size: 50
