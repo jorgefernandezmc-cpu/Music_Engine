@@ -303,8 +303,6 @@ For convenient execution without typing full commands:
 
 ```bash
 ./scripts/update_now.sh
-# or:
-./scripts/actualizar_ahora.sh
 ```
 
 ---

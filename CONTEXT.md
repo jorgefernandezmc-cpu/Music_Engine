@@ -94,8 +94,7 @@ Music_Engine/
 │   └── backups/                # Automatic SQLite database backups
 │
 ├── scripts/                    # Helper scripts and runners
-│   ├── update_now.sh           # Interactive quick runner script
-│   └── actualizar_ahora.sh     # Compatibility alias runner
+│   └── update_now.sh           # Interactive quick runner script
 │
 ├── logs/                       # Execution and audit logs
 │   ├── engine.log              # Main engine lifecycle log
