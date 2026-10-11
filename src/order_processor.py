@@ -15,9 +15,9 @@ from mutagen.oggopus import OggOpus
 from mutagen.mp4 import MP4
 
 from src.db import get_db_connection
-from src.paths import StoragePaths
+from src.paths import StoragePaths, sanitize_filename
 from src.notifications import send_notification
-from src.album_resolver import get_primary_artist, auto_fix_track
+from src.album_resolver import get_primary_artist, auto_fix_track, resolve_album_track
 from src.genre_resolver import clean_genre_string, apply_genre_metadata, resolve_genre
 from src.enrich_lyrics import check_and_upgrade_track
 
@@ -30,37 +30,41 @@ DEFAULT_PETICIONES_HEADER = """# ===============================================
 # This header is always retained; only completed orders will be cleared.
 # If any order cannot be completed, the reason will be reported right here.
 #
-# 1. REQUEST NEW MUSIC OR DISCOVERIES (AI + Official Catalog to Permanent):
-#    - A song:   Download "Song Title" by Artist
-#    - An artist: Duki
-#    - A genre:   Melodic techno for workouts / Indie pop
+# 1. REQUEST SONGS (PERMANENT OR TEMPORARY CRAVING):
+#    - Permanent:  Download "Song Title" by Artist  OR  permanent: Artist - Song
+#    - Craving:    craving: Artist - Song  OR  antojo: Artist - Song
+#    - Discovery:  Duki / Melodic techno for workouts (AI catalog -> Permanent)
 #
-# 2. FIX OR ASSIGN MUSIC GENRE (SQLite + Physical metadata):
-#    genre: <Song> -> <New Genre>
-#    Example:  genre: So Payaso -> Hard Rock / Rock
-#    (Or leave without arrow to re-analyze and auto-correct:  genre: Neverita)
+# 2. DOWNLOAD FULL ALBUMS (Official full album catalog):
+#    - Permanent album: album: Artist - Album  OR  permanent album: Artist - Album
+#    - Craving album:   craving album: Artist - Album  OR  antojo album: Artist - Album
 #
-# 3. UPDATE OR UPGRADE LYRICS (Fresh real-time synced .lrc download):
-#    lyrics: <Song>
-#    Example:  lyrics: Bohemian Rhapsody
-#
-# 4. SHIELD / PROMOTE SONG TO PERMANENT (Moves from Conveyor to Permanent immediately):
-#    favorite: <Song>
-#    Example:  favorite: Cuica
-#
-# 5. REMOVE / PURGE SONG FROM CONVEYOR (Physical deletion of audio and .lrc):
-#    purge: <Song>
-#    Example:  purge: Song I Dislike
-#
-# 6. MOVE OR ASSIGN SONG TO OFFICIAL ALBUM (0% AI, 100% exact):
+# 3. REASSIGN SONG TO OFFICIAL ALBUM (Moves physical files and tags):
 #    album: <Song> -> <Album Name>
 #    Example:  album: NO PIENSO LLAMAR -> STORM
 #
-# 7. REPAIR QUESTIONABLE TRACK / AUDIT OFFICIAL VERSION:
+# 4. FIX OR ASSIGN MUSIC GENRE (SQLite + Physical metadata):
+#    genre: <Song> -> <New Genre>
+#    Example:  genre: So Payaso -> Hard Rock / Rock
+#    (Or leave without arrow to auto-correct:  genre: Neverita)
+#
+# 5. UPDATE OR UPGRADE LYRICS (Fresh real-time synced .lrc download):
+#    lyrics: <Song>
+#    Example:  lyrics: Bohemian Rhapsody
+#
+# 6. SHIELD / PROMOTE SONG TO PERMANENT (Moves from Conveyor or Cravings to Permanent):
+#    favorite: <Song>  OR  permanente: <Song>
+#    Example:  favorite: Cuica
+#
+# 7. REMOVE / PURGE SONG (Physical deletion from Conveyor or Cravings):
+#    purge: <Song>
+#    Example:  purge: Song I Dislike
+#
+# 8. REPAIR QUESTIONABLE TRACK / AUDIT OFFICIAL VERSION:
 #    fix: <Song Name>
 #    Example:  fix: Me Enamoraste
 #
-# 8. CREATE INSTANT LOCAL RADIO (from your existing offline collection):
+# 9. CREATE INSTANT LOCAL RADIO (from your offline collection):
 #    radio: <Vibe or Mood>
 #    Example:  radio: Acoustic chill
 # ==============================================================================
@@ -240,18 +244,20 @@ class OrderProcessor:
 
     def process_promote_track(self, conn, song_query: str) -> tuple[bool, str]:
         """
-        Immediately promotes a song from Conveyor to Permanent, moving it to artist/album folder.
+        Immediately promotes a song from Conveyor or Cravings to Permanent, moving it to artist/album folder.
         """
         clean_q = song_query.strip().strip('"\'')
         cursor = conn.cursor()
-        cursor.execute("SELECT id, artist, title, album, file_path FROM tracks WHERE status = 'CINTA'")
-        cinta_tracks = cursor.fetchall()
+        cursor.execute("SELECT id, artist, title, album, file_path, status FROM tracks WHERE status IN ('CINTA', 'ANTOJO')")
+        candidates = cursor.fetchall()
 
-        best_cand, best_score = self._find_best_track_match(cinta_tracks, clean_q, min_score=75)
+        cand_for_match = [(c[0], c[1], c[2]) for c in candidates]
+        best_cand, best_score = self._find_best_track_match(cand_for_match, clean_q, min_score=75)
         if not best_cand:
-            return False, f"Track '{clean_q}' not found in Conveyor"
+            return False, f"Track '{clean_q}' not found in Conveyor or Cravings"
 
-        t_id, t_art, t_tit, t_alb, t_fpath = best_cand
+        cand_map = {c[0]: c for c in candidates}
+        t_id, t_art, t_tit, t_alb, t_fpath, t_prev_status = cand_map[best_cand[0]]
         p_artist = get_primary_artist(t_art)
         ext = os.path.splitext(t_fpath)[1] if t_fpath else '.opus'
         clean_alb = t_alb if t_alb else "Singles"
@@ -259,11 +265,22 @@ class OrderProcessor:
         os.makedirs(os.path.dirname(new_path), exist_ok=True)
 
         if t_fpath and os.path.exists(t_fpath):
+            old_dir = os.path.dirname(t_fpath)
             shutil.move(t_fpath, new_path)
             old_lrc = os.path.splitext(t_fpath)[0] + ".lrc"
             new_lrc = os.path.splitext(new_path)[0] + ".lrc"
             if os.path.exists(old_lrc):
                 shutil.move(old_lrc, new_lrc)
+
+            # Clean empty directory if it was under Cravings
+            try:
+                if old_dir and os.path.exists(old_dir) and not os.listdir(old_dir):
+                    os.rmdir(old_dir)
+                    parent_old = os.path.dirname(old_dir)
+                    if parent_old and os.path.exists(parent_old) and not os.listdir(parent_old) and parent_old != self.paths.cravings_dir:
+                        os.rmdir(parent_old)
+            except Exception:
+                pass
 
         cursor.execute("UPDATE tracks SET status = 'PERMANENT', is_permanent = 1, file_path = ? WHERE id = ?", (new_path, t_id))
         conn.commit()
@@ -274,19 +291,22 @@ class OrderProcessor:
 
     def process_purge_track(self, conn, song_query: str) -> tuple[bool, str]:
         """
-        Immediately purges a track from Conveyor and marks it as PURGED to prevent re-downloads.
+        Immediately purges a track from Conveyor or Cravings and marks it as PURGED to prevent re-downloads.
         """
         clean_q = song_query.strip().strip('"\'')
         cursor = conn.cursor()
-        cursor.execute("SELECT id, artist, title, file_path FROM tracks WHERE status = 'CINTA'")
-        cinta_tracks = cursor.fetchall()
+        cursor.execute("SELECT id, artist, title, file_path, status FROM tracks WHERE status IN ('CINTA', 'ANTOJO')")
+        candidates = cursor.fetchall()
 
-        best_cand, best_score = self._find_best_track_match(cinta_tracks, clean_q, min_score=75)
+        cand_for_match = [(c[0], c[1], c[2]) for c in candidates]
+        best_cand, best_score = self._find_best_track_match(cand_for_match, clean_q, min_score=75)
         if not best_cand:
-            return False, f"Track '{clean_q}' not found in Conveyor"
+            return False, f"Track '{clean_q}' not found in Conveyor or Cravings"
 
-        t_id, t_art, t_tit, t_fpath = best_cand
+        cand_map = {c[0]: c for c in candidates}
+        t_id, t_art, t_tit, t_fpath, t_status = cand_map[best_cand[0]]
         if t_fpath and os.path.exists(t_fpath):
+            old_dir = os.path.dirname(t_fpath)
             try:
                 os.remove(t_fpath)
             except Exception:
@@ -298,12 +318,201 @@ class OrderProcessor:
                 except Exception:
                     pass
 
+            # Clean empty directory if under Cravings
+            try:
+                if old_dir and os.path.exists(old_dir) and not os.listdir(old_dir):
+                    os.rmdir(old_dir)
+                    parent_old = os.path.dirname(old_dir)
+                    if parent_old and os.path.exists(parent_old) and not os.listdir(parent_old) and parent_old != self.paths.cravings_dir:
+                        os.rmdir(parent_old)
+            except Exception:
+                pass
+
         cursor.execute("UPDATE tracks SET status = 'PURGED' WHERE id = ?", (t_id,))
         conn.commit()
-        send_notification("Track Purged", f"{t_art} - {t_tit}\nRemoved from Conveyor")
+        origin = "Cravings" if t_status == 'ANTOJO' else "Conveyor"
+        send_notification("Track Purged", f"{t_art} - {t_tit}\nRemoved from {origin}")
         if self.playlists:
-            self.playlists.update_cinta_playlists()
-        return True, f"'{t_art} - {t_tit}' purged from Conveyor"
+            self.playlists.update_all_playlists()
+        return True, f"'{t_art} - {t_tit}' purged from {origin}"
+
+    def download_album(self, conn, artist_or_query: str, album_name: str = None, is_craving: bool = False) -> tuple[bool, str]:
+        """
+        Searches and queues all tracks from an official album via YouTube Music.
+        Queues tracks as PENDING into either Cravings or Permanent.
+        """
+        from ytmusicapi import YTMusic
+        yt = self.curator.yt if (self.curator and hasattr(self.curator, 'yt')) else YTMusic()
+
+        clean_q = artist_or_query.strip().strip('"\'')
+        if album_name and album_name.strip():
+            search_query = f"{clean_q} {album_name.strip()}".strip()
+        else:
+            if " - " in clean_q:
+                parts = clean_q.split(" - ", 1)
+                search_query = f"{parts[0].strip()} {parts[1].strip()}"
+            elif re.search(r'\s+(?:by|de)\s+', clean_q, re.IGNORECASE):
+                parts = re.split(r'\s+(?:by|de)\s+', clean_q, flags=re.IGNORECASE)
+                search_query = f"{parts[1].strip()} {parts[0].strip()}"
+            else:
+                search_query = clean_q
+
+        try:
+            results = yt.search(search_query, filter="albums")
+        except Exception as e:
+            logger.error(f"Error searching album '{search_query}': {e}")
+            return False, f"Error searching album on YouTube Music: {e}"
+
+        if not results:
+            return False, f"Album '{search_query}' not found on YouTube Music"
+
+        browse_id = results[0].get('browseId')
+        if not browse_id:
+            return False, f"Invalid album metadata found for '{search_query}'"
+
+        try:
+            album_data = yt.get_album(browse_id)
+        except Exception as e:
+            logger.error(f"Error fetching album {browse_id}: {e}")
+            return False, f"Error fetching album details: {e}"
+
+        tracks = album_data.get('tracks', [])
+        if not tracks:
+            return False, f"No tracks found in album '{album_data.get('title', search_query)}'"
+
+        album_title = album_data.get('title') or search_query
+        album_artists = album_data.get('artists', [])
+        primary_artist = album_artists[0]['name'] if album_artists else get_primary_artist(clean_q)
+        year = str(album_data.get('year', ''))
+
+        target_folder = "Cravings" if is_craving else "Permanent"
+        is_perm = 0 if is_craving else 1
+
+        cursor = conn.cursor()
+        queued_count = 0
+        track_idx = 1
+
+        for t in tracks:
+            vid = t.get('videoId')
+            if not vid:
+                continue
+            t_title = t.get('title', 'Unknown Title')
+            t_artists = t.get('artists', [])
+            t_artist = ", ".join([a['name'] for a in t_artists if 'name' in a]) if t_artists else primary_artist
+            t_dur = t.get('duration_seconds') or 0
+            t_num = t.get('trackNumber') or track_idx
+            track_idx += 1
+
+            safe_title = sanitize_filename(t_title)
+            safe_artist = sanitize_filename(primary_artist)
+            safe_album = sanitize_filename(album_title)
+
+            if is_craving:
+                f_path = self.paths.get_craving_track_path(safe_artist, safe_album, safe_title)
+            else:
+                f_path = self.paths.get_permanente_track_path(safe_artist, safe_album, safe_title)
+
+            cursor.execute("SELECT status FROM tracks WHERE id = ?", (vid,))
+            existing = cursor.fetchone()
+            if existing:
+                if existing[0] in ('ARCHIVED', 'PURGED'):
+                    cursor.execute("""
+                        UPDATE tracks 
+                        SET status = 'PENDING', file_path = ?, is_permanent = ?, album = ?, track_number = ?, release_date = ?
+                        WHERE id = ?
+                    """, (f_path, is_perm, album_title, t_num, year, vid))
+                    queued_count += 1
+                elif existing[0] == 'CINTA' and not is_craving:
+                    cursor.execute("""
+                        UPDATE tracks
+                        SET status = 'PENDING', file_path = ?, is_permanent = 1, album = ?, track_number = ?, release_date = ?
+                        WHERE id = ?
+                    """, (f_path, album_title, t_num, year, vid))
+                    queued_count += 1
+            else:
+                cursor.execute("""
+                    INSERT INTO tracks (id, title, artist, album, duration_seconds, status, is_permanent, file_path, track_number, release_date)
+                    VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?)
+                """, (vid, t_title, t_artist, album_title, t_dur, is_perm, f_path, t_num, year))
+                queued_count += 1
+
+        conn.commit()
+        send_notification("Album Queued", f"{primary_artist} - {album_title}\n{queued_count}/{len(tracks)} tracks queued to {target_folder}")
+        return True, f"Album '{primary_artist} - {album_title}' ({queued_count}/{len(tracks)} tracks) queued to {target_folder}"
+
+    def download_single_track(self, conn, query: str, is_craving: bool = False) -> tuple[bool, str]:
+        """
+        Directly queues a single track to Cravings or Permanent without requiring AI recommendation.
+        """
+        from ytmusicapi import YTMusic
+        yt = self.curator.yt if (self.curator and hasattr(self.curator, 'yt')) else YTMusic()
+
+        clean_q = query.strip().strip('"\'')
+        artist = ""
+        title = ""
+        if " - " in clean_q:
+            parts = clean_q.split(" - ", 1)
+            artist, title = parts[0].strip(), parts[1].strip()
+        elif re.search(r'\s+(?:by|de)\s+', clean_q, re.IGNORECASE):
+            parts = re.split(r'\s+(?:by|de)\s+', clean_q, flags=re.IGNORECASE)
+            title, artist = parts[0].strip(), parts[1].strip()
+        else:
+            title = clean_q
+
+        resolved = resolve_album_track(yt, artist, title)
+        vid = resolved.get('id')
+        if not vid:
+            return False, f"Track '{clean_q}' not found on YouTube Music"
+
+        r_title = resolved['title']
+        r_artist = resolved['artist']
+        r_primary = resolved.get('primary_artist', r_artist)
+        r_album = resolved.get('album') or "Singles"
+        r_dur = resolved.get('duration_seconds', 0)
+        r_track_num = resolved.get('track_number')
+        r_rel_date = resolved.get('release_date')
+
+        safe_title = sanitize_filename(r_title)
+        safe_artist = sanitize_filename(r_primary)
+        safe_album = sanitize_filename(r_album)
+
+        is_perm = 0 if is_craving else 1
+        if is_craving:
+            f_path = self.paths.get_craving_track_path(safe_artist, safe_album, safe_title)
+        else:
+            f_path = self.paths.get_permanente_track_path(safe_artist, safe_album, safe_title)
+
+        cursor = conn.cursor()
+        cursor.execute("SELECT status, file_path FROM tracks WHERE id = ?", (vid,))
+        row = cursor.fetchone()
+        if row:
+            curr_status = row[0]
+            if curr_status in ('ARCHIVED', 'PURGED'):
+                cursor.execute("""
+                    UPDATE tracks 
+                    SET status = 'PENDING', file_path = ?, is_permanent = ?, album = ?, track_number = ?, release_date = ?
+                    WHERE id = ?
+                """, (f_path, is_perm, r_album, r_track_num, r_rel_date, vid))
+            elif curr_status == 'CINTA' and not is_craving:
+                cursor.execute("""
+                    UPDATE tracks 
+                    SET status = 'PENDING', file_path = ?, is_permanent = 1, album = ?, track_number = ?, release_date = ?
+                    WHERE id = ?
+                """, (f_path, r_album, r_track_num, r_rel_date, vid))
+            else:
+                dest = "Cravings" if is_craving else "Permanent"
+                return True, f"'{r_artist} - {r_title}' already exists in library (status: {curr_status})"
+        else:
+            cursor.execute("""
+                INSERT INTO tracks (id, title, artist, album, duration_seconds, status, is_permanent, file_path, track_number, release_date)
+                VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?)
+            """, (vid, r_title, r_artist, r_album, r_dur, is_perm, f_path, r_track_num, r_rel_date))
+
+        conn.commit()
+        dest = "Cravings" if is_craving else "Permanent"
+        send_notification("Track Queued", f"{r_artist} - {r_title}\nQueued to {dest}")
+        return True, f"'{r_artist} - {r_title}' queued to {dest}"
+
 
     def process_fix_track(self, conn, fix_query: str) -> tuple[bool, str]:
         """
@@ -412,19 +621,43 @@ class OrderProcessor:
             for line in user_lines:
                 processed_orders += 1
 
-                # 1. Album reassignment: 'album: <song> -> <new album>'
-                if re.match(r'^(?:album|disco):\s*', line, re.IGNORECASE):
+                # 1. Craving Album Download
+                if re.match(r'^(?:craving\s+album|antojo\s+album|album\s+craving|album\s+antojo):\s*', line, re.IGNORECASE):
+                    payload = re.sub(r'^(?:craving\s+album|antojo\s+album|album\s+craving|album\s+antojo):\s*', '', line, flags=re.IGNORECASE).strip()
+                    ok, msg = self.download_album(conn, payload, is_craving=True)
+                    if not ok:
+                        failed_commands.append(f"{line}  # ERROR: {msg}")
+
+                # 2. Permanent Album Download
+                elif re.match(r'^(?:permanent\s+album|permanente\s+album|album\s+permanent|album\s+permanente):\s*', line, re.IGNORECASE):
+                    payload = re.sub(r'^(?:permanent\s+album|permanente\s+album|album\s+permanent|album\s+permanente):\s*', '', line, flags=re.IGNORECASE).strip()
+                    ok, msg = self.download_album(conn, payload, is_craving=False)
+                    if not ok:
+                        failed_commands.append(f"{line}  # ERROR: {msg}")
+
+                # 3. Album reassignment ('album: <song> -> <new album>') OR Permanent Album Download ('album: <artist> - <album>')
+                elif re.match(r'^(?:album|disco):\s*', line, re.IGNORECASE):
                     payload = re.sub(r'^(?:album|disco):\s*', '', line, flags=re.IGNORECASE).strip()
-                    parts = re.split(r'\s*(?:->|=>|=)\s*', payload, maxsplit=1)
-                    if len(parts) == 2:
+                    if re.search(r'\s*(?:->|=>|=)\s*', payload):
+                        parts = re.split(r'\s*(?:->|=>|=)\s*', payload, maxsplit=1)
                         ok, msg = self.process_album_move(conn, parts[0], parts[1])
                         if not ok:
                             failed_commands.append(f"{line}  # ERROR: {msg}")
                     else:
-                        logger.warning(f"Invalid syntax in album command: '{line}'")
-                        failed_commands.append(f"{line}  # ERROR: Invalid syntax. Use: album: Song -> New Album")
+                        ok, msg = self.download_album(conn, payload, is_craving=False)
+                        if not ok:
+                            failed_commands.append(f"{line}  # ERROR: {msg}")
 
-                # 1.b Natural language album phrase: 'Move songs "X" and "Y" to album "Z"'
+                # 3.b Natural language album download: 'Download album "X" by "Y"'
+                elif re.match(r'^(?:download|descargar)\s+(?:the\s+album|el\s+album|el\s+álbum|el\s+disco|album|álbum|disco)\s+(.+)', line, re.IGNORECASE):
+                    payload = re.sub(r'^(?:download|descargar)\s+(?:the\s+album|el\s+album|el\s+álbum|el\s+disco|album|álbum|disco)\s+', '', line, flags=re.IGNORECASE).strip()
+                    is_craving_req = bool(re.search(r'\b(?:craving|antojo)\b', line, re.IGNORECASE))
+                    payload = re.sub(r'\b(?:as\s+craving|como\s+antojo|craving|antojo|permanent|permanente)\b', '', payload, flags=re.IGNORECASE).strip()
+                    ok, msg = self.download_album(conn, payload, is_craving=is_craving_req)
+                    if not ok:
+                        failed_commands.append(f"{line}  # ERROR: {msg}")
+
+                # 3.c Natural language album move: 'Move songs "X" and "Y" to album "Z"'
                 elif re.search(r'(?:move|transfer|assign|mueve|cambia|pon|traslada|mover)\s+(?:the\s+song|the\s+songs|tracks|songs|la canción|las canciones|los temas|el tema)?\s*(.+?)\s*(?:from\s+[^t]+|de\s+[^a]+)?\s*(?:to\s+album|al\s+álbum)\s*["\'\*]?([^"\'\*\.]+)', line, re.IGNORECASE):
                     nl_m = re.search(r'(?:move|transfer|assign|mueve|cambia|pon|traslada|mover)\s+(?:the\s+song|the\s+songs|tracks|songs|la canción|las canciones|los temas|el tema)?\s*(.+?)\s*(?:from\s+[^t]+|de\s+[^a]+)?\s*(?:to\s+album|al\s+álbum)\s*["\'\*]?([^"\'\*\.]+)', line, re.IGNORECASE)
                     songs_part = nl_m.group(1).strip()
@@ -436,7 +669,21 @@ class OrderProcessor:
                         if not ok:
                             failed_commands.append(f'album: {s} -> {album_target}  # ERROR: {msg}')
 
-                # 2. Local Radio Command
+                # 4. Single Track Craving Download
+                elif re.match(r'^(?:craving|antojo):\s*', line, re.IGNORECASE):
+                    payload = re.sub(r'^(?:craving|antojo):\s*', '', line, flags=re.IGNORECASE).strip()
+                    ok, msg = self.download_single_track(conn, payload, is_craving=True)
+                    if not ok:
+                        failed_commands.append(f"{line}  # ERROR: {msg}")
+
+                # 4.b Natural language craving track download
+                elif re.match(r'^(?:download|descargar)\s+(?:the\s+craving|el\s+antojo|craving|antojo)\s+(.+)', line, re.IGNORECASE):
+                    payload = re.sub(r'^(?:download|descargar)\s+(?:the\s+craving|el\s+antojo|craving|antojo)\s+', '', line, flags=re.IGNORECASE).strip()
+                    ok, msg = self.download_single_track(conn, payload, is_craving=True)
+                    if not ok:
+                        failed_commands.append(f"{line}  # ERROR: {msg}")
+
+                # 5. Local Radio Command
                 elif line.lower().startswith('radio:'):
                     vibra = line[6:].strip()
                     logger.info(f"Local Radio mode activated for: '{vibra}'")
@@ -444,7 +691,7 @@ class OrderProcessor:
                         self.curator.generate_local_radio(vibra)
                     send_notification("Local Radio Generated", f"Vibe: {vibra}")
 
-                # 3. Repair Command
+                # 6. Repair Command
                 elif line.lower().startswith(('fix:', 'repair:', 'reparar:', 'arreglar:')):
                     fix_query = re.sub(r'^(fix|repair|reparar|arreglar):\s*', '', line, flags=re.IGNORECASE).strip()
                     logger.info(f"Repair command received: '{fix_query}'")
@@ -452,7 +699,7 @@ class OrderProcessor:
                     if not ok:
                         failed_commands.append(f"{line}  # NOTICE: {msg}")
 
-                # 4. Music Genre Correction / Assignment
+                # 7. Music Genre Correction / Assignment
                 elif re.match(r'^(?:genre|genero|género):\s*', line, re.IGNORECASE):
                     payload = re.sub(r'^(?:genre|genero|género):\s*', '', line, flags=re.IGNORECASE).strip()
                     if re.search(r'\s*(?:->|=>|=)\s*', payload):
@@ -463,28 +710,39 @@ class OrderProcessor:
                     if not ok:
                         failed_commands.append(f"{line}  # ERROR: {msg}")
 
-                # 4.b Natural language genre phrase: 'Change genre of "X" to "Y"'
+                # 7.b Natural language genre phrase: 'Change genre of "X" to "Y"'
                 elif re.search(r'(?:change|set|fix|update|cambia|pon|corrige|actualiza)\s+(?:the\s+)?(?:genre|g[ée]nero)\s+(?:of|for|de)\s+["\']?([^"\']+)["\']?\s+(?:to|a)\s+["\']?([^"\']+)["\']?', line, re.IGNORECASE):
                     gm = re.search(r'(?:change|set|fix|update|cambia|pon|corrige|actualiza)\s+(?:the\s+)?(?:genre|g[ée]nero)\s+(?:of|for|de)\s+["\']?([^"\']+)["\']?\s+(?:to|a)\s+["\']?([^"\']+)["\']?', line, re.IGNORECASE)
                     ok, msg = self.process_genre_update(conn, gm.group(1), gm.group(2))
                     if not ok:
                         failed_commands.append(f"{line}  # ERROR: {msg}")
 
-                # 5. Lyrics Update / Upgrade
+                # 8. Lyrics Update / Upgrade
                 elif re.match(r'^(?:lyrics|lyric|letra):\s*', line, re.IGNORECASE):
                     payload = re.sub(r'^(?:lyrics|lyric|letra):\s*', '', line, flags=re.IGNORECASE).strip()
                     ok, msg = self.process_lyrics_update(conn, payload)
                     if not ok:
                         failed_commands.append(f"{line}  # ERROR: {msg}")
 
-                # 6. Promote / Shield to Permanent
-                elif re.match(r'^(?:favorite|fav|permanent|promote|shield|save|favorita|favorito|permanente|guardar|blindar):\s*', line, re.IGNORECASE):
-                    payload = re.sub(r'^(?:favorite|fav|permanent|promote|shield|save|favorita|favorito|permanente|guardar|blindar):\s*', '', line, flags=re.IGNORECASE).strip()
+                # 9. Permanent Track Request / Promotion
+                elif re.match(r'^(?:permanent|permanente):\s*', line, re.IGNORECASE):
+                    payload = re.sub(r'^(?:permanent|permanente):\s*', '', line, flags=re.IGNORECASE).strip()
+                    # Try promoting from Conveyor/Cravings first
+                    ok, msg = self.process_promote_track(conn, payload)
+                    if not ok:
+                        # Otherwise download new track directly to Permanent
+                        ok, msg = self.download_single_track(conn, payload, is_craving=False)
+                    if not ok:
+                        failed_commands.append(f"{line}  # ERROR: {msg}")
+
+                # 9.b Promote / Shield to Permanent
+                elif re.match(r'^(?:favorite|fav|promote|shield|save|favorita|favorito|guardar|blindar):\s*', line, re.IGNORECASE):
+                    payload = re.sub(r'^(?:favorite|fav|promote|shield|save|favorita|favorito|guardar|blindar):\s*', '', line, flags=re.IGNORECASE).strip()
                     ok, msg = self.process_promote_track(conn, payload)
                     if not ok:
                         failed_commands.append(f"{line}  # ERROR: {msg}")
 
-                # 7. Purge / Delete from Conveyor
+                # 10. Purge / Delete from Conveyor or Cravings
                 elif re.match(r'^(?:purge|delete|remove|borrar|eliminar|quitar):\s*', line, re.IGNORECASE):
                     payload = re.sub(r'^(?:purge|delete|remove|borrar|eliminar|quitar):\s*', '', line, flags=re.IGNORECASE).strip()
                     ok, msg = self.process_purge_track(conn, payload)

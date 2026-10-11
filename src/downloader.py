@@ -114,7 +114,12 @@ class Downloader:
                         logger.warning(f"Attempt {attempt_idx+1} for {t_id} failed: {e}")
                     
                 if download_success:
-                    new_status = 'PERMANENT' if is_perm else 'CINTA'
+                    if is_perm:
+                        new_status = 'PERMANENT'
+                    elif hasattr(self.paths, 'cravings_dir') and self.paths.cravings_dir and (self.paths.cravings_dir in f_path):
+                        new_status = 'ANTOJO'
+                    else:
+                        new_status = 'CINTA'
                     actual_path = f_path
                     fallback_codec = self.dl_config.get('fallback_codec', 'm4a').lstrip('.')
                     fallback_file = f"{base_path}.{fallback_codec}"

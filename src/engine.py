@@ -108,6 +108,58 @@ class MusicEngine:
 
     _clean_antojos_file = _clean_peticiones_file
 
+    def _purge_cravings(self, cursor) -> int:
+        """
+        Purges expired temporary tracks from Cravings folder based on retention_days.
+        Deletes physical audio files, sidecars, empty directories, and sets status to PURGED.
+        """
+        cravings_cfg = self.config.get('cravings', {}) or self.config.get('antojos', {})
+        retention_days = cravings_cfg.get('retention_days', 30)
+        if retention_days <= 0:
+            return 0
+
+        cursor.execute("""
+            SELECT id, file_path FROM tracks 
+            WHERE status = 'ANTOJO' 
+            AND (julianday('now') - julianday(COALESCE(last_played_at, added_at))) > ?
+        """, (retention_days,))
+        to_purge = cursor.fetchall()
+
+        purged_count = 0
+        for t_id, f_path in to_purge:
+            try:
+                old_dir = os.path.dirname(f_path) if f_path else None
+                if f_path and os.path.exists(f_path):
+                    os.remove(f_path)
+
+                if f_path:
+                    base_p = os.path.splitext(f_path)[0]
+                    for ext in ('.lrc', '.jpg', '.png'):
+                        sc = f"{base_p}{ext}"
+                        if os.path.exists(sc):
+                            try:
+                                os.remove(sc)
+                            except Exception:
+                                pass
+
+                # Clean up empty artist/album folder in Cravings
+                try:
+                    if old_dir and os.path.exists(old_dir) and not os.listdir(old_dir):
+                        os.rmdir(old_dir)
+                        parent_old = os.path.dirname(old_dir)
+                        if parent_old and os.path.exists(parent_old) and not os.listdir(parent_old) and parent_old != self.paths.cravings_dir:
+                            os.rmdir(parent_old)
+                except Exception:
+                    pass
+
+                cursor.execute("UPDATE tracks SET status = 'PURGED' WHERE id = ?", (t_id,))
+                purged_count += 1
+                logger.info(f"Purged expired craving track {t_id} ({f_path}) after {retention_days} days retention")
+            except Exception as e:
+                logger.error(f"Failed purging craving track {t_id}: {e}")
+
+        return purged_count
+
     def _check_release_radar(self):
         """Monitors new releases (singles) from most listened artists in Permanent."""
         radar_cfg = self.config.get('radar', {})
@@ -432,9 +484,12 @@ class MusicEngine:
                     except Exception as e:
                         logger.error(f"Failed purging {t_id}: {e}")
 
+            # --- CRAVINGS PURGE ---
+            purged_cravings = self._purge_cravings(cursor)
+
             conn.commit()
 
-            if promoted_count > 0:
+            if promoted_count > 0 or purged_cravings > 0:
                 self.playlists.update_all_playlists()
             elif purged_count > 0:
                 self.playlists.update_cinta_playlists()

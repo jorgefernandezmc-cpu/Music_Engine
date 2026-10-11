@@ -133,7 +133,7 @@ class FileSyncManager:
         """
         with get_db_connection(self.db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, file_path FROM tracks WHERE status IN ('CINTA', 'PERMANENT')")
+            cursor.execute("SELECT id, file_path FROM tracks WHERE status IN ('CINTA', 'PERMANENT', 'ANTOJO')")
             active_tracks = cursor.fetchall()
             
             missing_tracks = []

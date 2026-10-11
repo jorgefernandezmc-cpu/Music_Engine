@@ -250,13 +250,18 @@ class CuratorLLM:
                 
                 if target_folder in ("Cinta", "Conveyor"):
                     file_path = self.paths.get_cinta_track_path(safe_artist, safe_title)
+                    is_perm = 0
                     # STRICT RULE: Never download to Conveyor tracks already present in Permanent
                     cursor.execute("SELECT id FROM tracks WHERE status = 'PERMANENT' AND (LOWER(title) = LOWER(?) OR LOWER(id) = LOWER(?))", (r_title, vid))
                     if cursor.fetchone():
                         logger.info(f"Discarded for Conveyor '{r_artist} - {r_title}': Already exists in Permanent.")
                         continue
+                elif target_folder in ("Cravings", "Antojos"):
+                    file_path = self.paths.get_craving_track_path(safe_artist, safe_album, safe_title)
+                    is_perm = 0
                 else:
                     file_path = self.paths.get_permanente_track_path(safe_artist, safe_album, safe_title)
+                    is_perm = 1
                 
                 # Check if file_path (case-insensitive) already exists to prevent Android Syncthing conflicts
                 cursor.execute("SELECT id FROM tracks WHERE LOWER(file_path) = LOWER(?)", (file_path,))
@@ -275,9 +280,9 @@ class CuratorLLM:
                         logger.info(f"Resurrecting archived track '{rec.artist} - {rec.title}' (ID: {vid})")
                         cursor.execute("""
                             UPDATE tracks 
-                            SET status = ?, file_path = ?, is_permanent = 0, album = ?
+                            SET status = ?, file_path = ?, is_permanent = ?, album = ?
                             WHERE id = ?
-                        """, (target_status, file_path, r_album, vid))
+                        """, (target_status, file_path, is_perm, r_album, vid))
                         valid_count += 1
                     else:
                         logger.info(f"Discarded '{rec.artist} - {rec.title}': Already exists in DB (status: {current_status}, ID: {vid})")
@@ -287,8 +292,8 @@ class CuratorLLM:
                 r_rel_date = resolved.get('release_date')
                 cursor.execute("""
                     INSERT INTO tracks (id, title, artist, album, duration_seconds, status, is_permanent, file_path, genre, track_number, release_date)
-                    VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
-                """, (vid, r_title, r_artist, r_album, r_duration, target_status, file_path, rec.genre_context, r_track_num, r_rel_date))
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (vid, r_title, r_artist, r_album, r_duration, target_status, is_perm, file_path, rec.genre_context, r_track_num, r_rel_date))
                 
                 logger.info(f"Accepted '{r_artist} - {r_title}' [Album: {r_album}] [ID: {vid}]")
                 valid_count += 1

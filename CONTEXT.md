@@ -152,10 +152,11 @@ Stores the catalog of tracks known to the system:
 - `album` (TEXT): Official album name (prioritized as studio album).
 - `duration_seconds` (INTEGER): Duration in seconds.
 - `status` (TEXT NOT NULL): Lifecycle state:
-  - `PENDING`: Queued for download into `Cinta` or `Permanente`.
+  - `PENDING`: Queued for download into `Cinta`, `Permanente`, or `Antojos` (`Cravings`).
   - `CINTA`: Downloaded and active in the ephemeral Conveyor buffer.
   - `PERMANENT`: Part of the permanent, untouchable library.
-  - `PURGED`: Removed due to grace period expiry, repeated skips, or manual deletion. Never auto-downloaded again.
+  - `ANTOJO`: Downloaded and active in the temporary Cravings folder (purged after `retention_days`).
+  - `PURGED`: Removed due to grace period expiry, retention expiry, repeated skips, or manual deletion. Never auto-downloaded again.
   - `FAILED`: Download error or transient failure (auto-recoverable to `PENDING`).
 - `is_permanent` (BOOLEAN DEFAULT 0): Boolean permanence flag.
 - `added_at` (DATETIME DEFAULT CURRENT_TIMESTAMP): Timestamp when added to the system.
@@ -194,7 +195,9 @@ Resolves all absolute and relative paths based on `config/config.yaml`.
 - Provides helper methods to construct clean paths:
   - `get_permanent_track_path(artist, album, title, ext='.opus')`
   - `get_conveyor_track_path(artist, title, ext='.opus')`
-  - Backward-compatible aliases: `get_permanente_track_path`, `get_cinta_track_path`.
+  - `get_craving_track_path(artist, album, title, ext='.opus')`
+  - Backward-compatible aliases: `get_permanente_track_path`, `get_cinta_track_path`, `get_antojo_track_path`.
+  - Properties: `cravings_dir` (alias `antojos_dir`), `conveyor_dir` (`cinta_dir`), `permanent_dir` (`permanente_dir`).
 
 ### 5.2. `src/album_resolver.py` (`resolve_album_track`, `get_primary_artist`)
 - **Primary artist extraction:**
@@ -223,29 +226,33 @@ Central orchestrator of the music lifecycle.
   1. **Release Radar:** Scans for recent releases from favorite artists.
   2. **Auto-Backup:** Generates SQLite backups in `data/backups/`.
   3. **Reverse Sync:** Detects manual file moves to `Permanente` and updates database records.
-  4. **Ghost Cleaner:** Detects manual deletions from mobile/PC, immediately cleans associated `.lrc` sidecars, purges orphan `.lrc` files without audio, and marks tracks as `PURGED` (with a 50-file mass-deletion failsafe).
+  4. **Ghost Cleaner:** Detects manual deletions from mobile/PC, immediately cleans associated `.lrc` sidecars, purges orphan `.lrc` files without audio, and marks tracks as `PURGED` (with a 50-file mass-deletion failsafe; covers `CINTA`, `PERMANENT`, and `ANTOJO`).
   5. **ListenBrainz Telemetry:** Downloads recent scrobbles and updates `play_count` and timestamps.
   6. **Heart Shielding ("Love"):** Tracks hearted on mobile immediately transition to `PERMANENT` and are moved to their official artist/album folder.
-  7. **Requests Mailbox & Remote Commands (`peticiones.txt`):**
+  7. **Requests Mailbox & Remote Commands (`peticiones.txt` / `requests.txt`):**
      - Maintains a persistent header with a quick command guide.
+     - **Permanent Single Track:** `Download "Song" by Artist` or `permanent: <Artist> - <Title>`.
+     - **Craving Single Track (Temporary):** `craving: <Artist> - <Title>` or `antojo: <Artist> - <Title>` (downloads directly into Cravings folder).
+     - **Full Permanent Album:** `album: <Artist> - <Album>` or `permanent album: <Artist> - <Album>` (downloads complete official tracklist to Permanent).
+     - **Full Craving Album (Temporary):** `craving album: <Artist> - <Album>` or `antojo album: <Artist> - <Album>` (downloads complete official tracklist to Cravings).
      - **Genre Correction:** `genre: <track> -> <new_genre>` (or `genre: <track>` for automatic AI re-analysis; updates SQLite and physical tags).
      - **Lyrics Refresh:** `lyrics: <track>` (forces re-scan and clean download of synced `.lrc` lyrics).
-     - **Promote to Permanent:** `favorite: <track>` / `permanent: <track>` (moves from Conveyor to Permanent album folder immediately).
-     - **Purge from Conveyor:** `purge: <track>` / `delete: <track>` (removes from Conveyor and cleans audio + `.lrc`).
+     - **Promote to Permanent:** `favorite: <track>` / `permanent: <track>` (moves from Conveyor or Cravings to Permanent album folder immediately).
+     - **Purge Track:** `purge: <track>` / `delete: <track>` (removes from Conveyor or Cravings and cleans audio + `.lrc`).
      - **Album Reassignment:** `album: <track> -> <new_album>` (moves audio and `.lrc`, updates tags, cleans old directories).
      - **Self-Repair:** `fix: <track>` (downloads verified official version).
      - **Local Radios:** `radio: <vibe>`.
-     - **Direct Permanent Requests:** Downloads by song, artist, or style directly into the permanent library.
+     - **Direct Permanent Requests:** Downloads by song, artist, or style directly into the permanent library via AI Curator.
      - **Feedback Loop:** Successfully processed commands are cleared from the file; failed commands are retained with an explanation comment.
   8. **Strict Duplicate Prevention in Conveyor:** Conveyor never downloads tracks already in `Permanente` (both by YouTube ID and normalized title/artist match).
-  9. **Zero Unsolicited Craving Folders:** Music on demand is solely driven by explicit requests in `peticiones.txt` sent straight to Permanent.
-  10. **Automatic Promotion:** Tracks with sufficient plays (>=15) are promoted to `Permanente`.
+  9. **Cravings Retention & Auto-Purge (`_purge_cravings`):** Tracks in Cravings (`ANTOJO` status) are automatically purged after exceeding configured `cravings.retention_days` (default 30 days without play), removing physical audio files, `.lrc` sidecars, empty directories, and updating status to `PURGED`.
+  10. **Automatic Promotion:** Tracks with sufficient plays (>=15) are promoted from Conveyor to `Permanente`.
   11. **Guillotine Purge:** Unplayed Conveyor tracks past the grace period or with high skip ratios are physically deleted and marked `PURGED`.
   12. **Progressive Buffer Replenishment:**
       - In periodic automated cycles: moderate curation (up to 20 tracks) and limited batch downloads (up to 50 tracks) to avoid bandwidth saturation or rate limits.
       - In full manual mode (`--fill`): fills all open slots up to maximum buffer capacity (750 tracks).
   13. **Auto-Recovery:** Automatically resets `FAILED` tracks to `PENDING` on the next run for retry.
-  14. **Playlist Regeneration:** Regenerates all `.m3u8` playlists and the Lune JSON backup.
+  14. **Playlist Regeneration:** Regenerates all `.m3u8` playlists (including `Antojos.m3u8` / `Cravings.m3u8`) and the Lune JSON backup.
   15. **Consolidated Desktop Notifications:** No per-song spam. Emits a single grouped notification after lyrics batches (with expandable track breakdown) and an execution summary at the end of the engine run.
 
 ### 5.5. `src/telemetry.py` (`TelemetryEngine`)

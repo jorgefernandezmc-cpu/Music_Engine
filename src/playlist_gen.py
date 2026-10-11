@@ -325,6 +325,26 @@ class PlaylistGenerator:
         self._write_playlist(cinta_m3u8, cinta_tracks, meta_map, register_for_lune=True, lune_name="Cinta")
         self.generate_descubrimiento_prioritario(meta_map)
 
+    def generate_cravings_playlist(self, meta_map: dict):
+        """
+        Generates playlist for Cravings / Antojos:
+        Playlists/Antojos.m3u8 (or Playlists/Cravings.m3u8).
+        """
+        cravings_dir = getattr(self.paths, 'cravings_dir', None)
+        if not cravings_dir or not os.path.exists(cravings_dir):
+            return
+
+        cravings_tracks = []
+        for root, dirs, files in os.walk(cravings_dir):
+            dirs.sort()
+            for f in sorted(files):
+                if f.endswith(('.opus', '.m4a', '.mp3', '.flac')):
+                    cravings_tracks.append(os.path.join(root, f))
+
+        folder_name = os.path.basename(cravings_dir.rstrip('/\\')) or "Antojos"
+        playlist_path = os.path.join(self.playlists_dir, f"{folder_name}.m3u8")
+        self._write_playlist(playlist_path, cravings_tracks, meta_map, register_for_lune=True, lune_name=folder_name)
+
     def generate_rotacion_viva(self, meta_map: dict):
         """
         Generates smart playlist Rotación Viva:
@@ -488,8 +508,8 @@ class PlaylistGenerator:
                 return {}
         return {}
 
-    def _save_folder_state(self, perm_fp: str = None, cinta_fp: str = None):
-        """Saves current Permanent and Conveyor fingerprints in data/playlist_folder_state.json."""
+    def _save_folder_state(self, perm_fp: str = None, cinta_fp: str = None, cravings_fp: str = None):
+        """Saves current Permanent, Conveyor, and Cravings fingerprints in data/playlist_folder_state.json."""
         state = self._load_folder_state()
         if perm_fp is not None:
             state["permanente_fingerprint"] = perm_fp
@@ -501,6 +521,11 @@ class PlaylistGenerator:
         elif "cinta_fingerprint" not in state:
             state["cinta_fingerprint"] = self.get_folder_fingerprint(self.paths.cinta_dir)
 
+        if cravings_fp is not None:
+            state["cravings_fingerprint"] = cravings_fp
+        elif "cravings_fingerprint" not in state and hasattr(self.paths, 'cravings_dir'):
+            state["cravings_fingerprint"] = self.get_folder_fingerprint(self.paths.cravings_dir)
+
         try:
             os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
             with open(self.state_file, 'w', encoding='utf-8') as f:
@@ -509,23 +534,25 @@ class PlaylistGenerator:
             print(f"[PlaylistGenerator] Error saving folder state: {e}")
 
     def update_permanent_playlists(self, meta_map: dict = None):
-        """Updates global Permanent list and artist playlists, syncing Lune."""
+        """Updates global Permanent list, artist playlists, and cravings, syncing Lune."""
         print("[PlaylistGenerator] Updating Permanent playlists...")
         self.lune_playlists = {}
         meta_map = meta_map or self._get_meta_map()
         self.generate_permanent_playlists(meta_map)
         self.generate_cinta_playlists(meta_map)
+        self.generate_cravings_playlist(meta_map)
         self.generate_rotacion_viva(meta_map)
         self.generate_lune_backup(meta_map)
         self._save_folder_state(perm_fp=self.get_folder_fingerprint(self.paths.permanente_dir))
 
     def update_cinta_playlists(self, meta_map: dict = None):
-        """Updates playlists associated with Conveyor folder, syncing Lune."""
+        """Updates playlists associated with Conveyor and Cravings folders, syncing Lune."""
         print("[PlaylistGenerator] Updating playlists associated with Conveyor...")
         self.lune_playlists = {}
         meta_map = meta_map or self._get_meta_map()
         self.generate_cinta_playlists(meta_map)
         self.generate_permanent_playlists(meta_map)
+        self.generate_cravings_playlist(meta_map)
         self.generate_rotacion_viva(meta_map)
         self.generate_lune_backup(meta_map)
         self._save_folder_state(cinta_fp=self.get_folder_fingerprint(self.paths.cinta_dir))
@@ -536,39 +563,40 @@ class PlaylistGenerator:
         meta_map = meta_map or self._get_meta_map()
         self.generate_cinta_playlists(meta_map)
         self.generate_permanent_playlists(meta_map)
+        self.generate_cravings_playlist(meta_map)
         self.generate_rotacion_viva(meta_map)
         self.generate_lune_backup(meta_map)
+        crav_fp = self.get_folder_fingerprint(self.paths.cravings_dir) if hasattr(self.paths, 'cravings_dir') else ""
         self._save_folder_state(
             perm_fp=self.get_folder_fingerprint(self.paths.permanente_dir),
-            cinta_fp=self.get_folder_fingerprint(self.paths.cinta_dir)
+            cinta_fp=self.get_folder_fingerprint(self.paths.cinta_dir),
+            cravings_fp=crav_fp
         )
 
     def check_and_update_if_modified(self) -> dict:
         """
-        Checks whether Permanent or Conveyor directories were physically modified.
-        Returns: {'permanente_updated': bool, 'cinta_updated': bool}
+        Checks whether Permanent, Conveyor, or Cravings directories were physically modified.
+        Returns: {'permanente_updated': bool, 'cinta_updated': bool, 'cravings_updated': bool}
         """
         if not self.config.get('playlists', {}).get('auto_update_on_change', True):
-            return {"permanente_updated": False, "cinta_updated": False}
+            return {"permanente_updated": False, "cinta_updated": False, "cravings_updated": False}
 
         state = self._load_folder_state()
         saved_perm = state.get("permanente_fingerprint", "")
         saved_cinta = state.get("cinta_fingerprint", "")
+        saved_cravings = state.get("cravings_fingerprint", "")
 
         curr_perm = self.get_folder_fingerprint(self.paths.permanente_dir)
         curr_cinta = self.get_folder_fingerprint(self.paths.cinta_dir)
+        curr_cravings = self.get_folder_fingerprint(self.paths.cravings_dir) if hasattr(self.paths, 'cravings_dir') else ""
 
         perm_changed = (curr_perm != saved_perm)
         cinta_changed = (curr_cinta != saved_cinta)
+        cravings_changed = (curr_cravings != saved_cravings)
 
-        if perm_changed and cinta_changed:
-            print("[PlaylistGenerator] Detected changes in both Permanent and Conveyor. Updating all playlists...")
+        if perm_changed or cinta_changed or cravings_changed:
+            print("[PlaylistGenerator] Detected directory modifications. Updating all playlists...")
             self.update_all_playlists()
-        elif perm_changed:
-            print("[PlaylistGenerator] Detected modification in Permanent folder. Updating permanent playlists...")
-            self.update_permanent_playlists()
-        elif cinta_changed:
-            print("[PlaylistGenerator] Detected modification in Conveyor folder. Updating conveyor playlists...")
-            self.update_cinta_playlists()
 
-        return {"permanente_updated": perm_changed, "cinta_updated": cinta_changed}
+        return {"permanente_updated": perm_changed, "cinta_updated": cinta_changed, "cravings_updated": cravings_changed}
+

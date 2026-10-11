@@ -309,36 +309,44 @@ For convenient execution without typing full commands:
 
 ## 📱 Remote Control Mailbox (`requests.txt` / `peticiones.txt`)
 
-Inside the root of your synced music directory (`base_dir`), the engine monitors `requests.txt` (or `peticiones.txt`). You can edit this file from your mobile phone to issue commands or request tracks:
+Inside the root of your synced music directory (`base_dir`), the engine monitors `requests.txt` (or `peticiones.txt`). You can edit this file from your mobile phone to issue commands, request full albums, or download temporary cravings:
 
 ```text
-# 1. Download directly to Permanent library:
-Artist Name - Track Name
-Daft Punk - Get Lucky
+# 1. Download full studio albums:
+album: Pink Floyd - The Dark Side of the Moon        # Full album to Permanent library
+permanent album: Rosalía - Motomami                  # Full album to Permanent library
+craving album: Arctic Monkeys - AM                   # Full album to temporary Cravings folder
 
-# 2. Promote / shield track from Conveyor to Permanent:
+# 2. Download individual tracks:
+Download "Get Lucky" by Daft Punk                    # Single track to Permanent library
+permanent: Daft Punk - Get Lucky                     # Single track to Permanent library
+craving: Charli xcx - Apple                          # Single track to temporary Cravings folder
+antojo: Quevedo - Columbia                           # Temporary craving (purged after retention_days)
+
+# 3. Promote / shield track from Conveyor or Cravings to Permanent:
 favorite: Track Name
 permanent: Track Name
 
-# 3. Discard / purge track immediately from Conveyor:
+# 4. Discard / purge track immediately from Conveyor or Cravings:
 purge: Track Name
 delete: Track Name
 
-# 4. Correct album metadata:
+# 5. Correct album metadata (reassign song):
 album: Track Name -> Official Album Title
 
-# 5. Correct genre metadata:
+# 6. Correct genre metadata:
 genre: Track Name -> Synthwave
 
-# 6. Fetch / upgrade synchronized lyrics:
+# 7. Fetch / upgrade synchronized lyrics:
 lyrics: Track Name
 
-# 7. Discover new music via thematic radio:
+# 8. Discover new music via thematic radio:
 radio: 90s Grunge Rock
 ```
 
 > [!TIP]
-> Spanish aliases (`favorita:`, `borrar:`, `genero:`, `letra:`) are fully supported interchangeably.
+> - **Cravings Folder (`Cravings/` / `Antojos/`)**: Songs and albums queued as cravings are kept temporarily and automatically purged once they exceed the configured retention period (`cravings.retention_days`, default: 30 days).
+> - Spanish aliases (`antojo:`, `antojo album:`, `favorita:`, `borrar:`, `genero:`, `letra:`) are fully supported interchangeably.
 
 ---
 

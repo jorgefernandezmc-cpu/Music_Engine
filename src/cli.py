@@ -22,7 +22,7 @@ def get_status(db_path="data/conveyor_state.sqlite", config_path="config/config.
         cursor = conn.cursor()
         
         counts = {}
-        for status in ['CINTA', 'PERMANENT', 'PENDING', 'PURGED']:
+        for status in ['CINTA', 'PERMANENT', 'ANTOJO', 'PENDING', 'PURGED']:
             cursor.execute("SELECT COUNT(*) FROM tracks WHERE status = ?", (status,))
             counts[status] = cursor.fetchone()[0]
             
@@ -56,6 +56,7 @@ def get_status(db_path="data/conveyor_state.sqlite", config_path="config/config.
     print(f"Base directory:     {storage_dir}")
     print(f"Tracks in CONVEYOR: {counts['CINTA']}")
     print(f"PERMANENT tracks:   {counts['PERMANENT']}")
+    print(f"CRAVINGS tracks:    {counts['ANTOJO']}")
     print(f"PENDING tracks:     {counts['PENDING']}")
     print(f"PURGED tracks:      {counts['PURGED']}")
     print("-" * 45)

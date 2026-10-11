@@ -39,6 +39,7 @@ class StoragePaths:
         # Main subdirectories (English defaults with transparent backward compatibility)
         conveyor = storage_cfg.get('conveyor_dir', storage_cfg.get('cinta_dir', 'Conveyor'))
         permanent = storage_cfg.get('permanent_dir', storage_cfg.get('permanente_dir', 'Permanent'))
+        cravings = storage_cfg.get('cravings_dir', storage_cfg.get('antojos_dir', 'Cravings'))
         playlists = storage_cfg.get('playlists_dir', 'Playlists')
         requests_file = storage_cfg.get('requests_file', storage_cfg.get('peticiones_file', storage_cfg.get('antojos_file', 'requests.txt')))
         
@@ -46,6 +47,8 @@ class StoragePaths:
         self.cinta_dir = self.conveyor_dir
         self.permanent_dir = os.path.join(self.base_dir, permanent)
         self.permanente_dir = self.permanent_dir
+        self.cravings_dir = os.path.join(self.base_dir, cravings)
+        self.antojos_dir = self.cravings_dir
         self.playlists_dir = os.path.join(self.base_dir, playlists)
         
         # Requests mailbox file (English default: requests.txt, with fallback to peticiones.txt if present)
@@ -71,7 +74,7 @@ class StoragePaths:
 
     def ensure_dirs(self):
         """Ensures main directories exist on disk."""
-        for d in [self.base_dir, self.cinta_dir, self.permanente_dir, self.playlists_dir]:
+        for d in [self.base_dir, self.cinta_dir, self.permanente_dir, self.cravings_dir, self.playlists_dir]:
             os.makedirs(d, exist_ok=True)
         if not os.path.exists(self.peticiones_file):
             try:
@@ -103,3 +106,18 @@ class StoragePaths:
         return os.path.join(self.cinta_dir, filename)
 
     get_conveyor_track_path = get_cinta_track_path
+
+    def get_craving_track_path(self, artist: str, album: str, title: str, ext: str = "opus") -> str:
+        """
+        Returns absolute path in Cravings under hierarchy:
+        Cravings/<Artist>/<Album>/<Artist> - <Title>.<ext>
+        """
+        safe_artist = sanitize_filename(artist)
+        safe_album = sanitize_filename(album if album and album.strip() else "Singles")
+        safe_title = sanitize_filename(title)
+        
+        target_dir = os.path.join(self.cravings_dir, safe_artist, safe_album)
+        filename = f"{safe_artist} - {safe_title}.{ext.lstrip('.')}"
+        return os.path.join(target_dir, filename)
+
+    get_antojo_track_path = get_craving_track_path
