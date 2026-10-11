@@ -12,6 +12,56 @@ def sanitize_filename(name: str) -> str:
     name = name.strip('. ')
     return name or "Unknown"
 
+DEFAULT_REQUESTS_HEADER = """# ==============================================================================
+#                      REMOTE REQUESTS AND COMMANDS MAILBOX
+# ==============================================================================
+# Write your requests or commands at the bottom of this file (one per line).
+# This header is always retained; only completed orders will be cleared.
+# If any order cannot be completed, the reason will be reported right here.
+#
+# 1. REQUEST SONGS (PERMANENT OR TEMPORARY CRAVING):
+#    - Permanent:  Download "Song Title" by Artist  OR  permanent: Artist - Song
+#    - Craving:    craving: Artist - Song  OR  antojo: Artist - Song
+#    - Discovery:  Duki / Melodic techno for workouts (AI catalog -> Permanent)
+#
+# 2. DOWNLOAD FULL ALBUMS (Official full album catalog):
+#    - Permanent album: album: Artist - Album  OR  permanent album: Artist - Album
+#    - Craving album:   craving album: Artist - Album  OR  antojo album: Artist - Album
+#
+# 3. REASSIGN SONG TO OFFICIAL ALBUM (Moves physical files and tags):
+#    album: <Song> -> <Album Name>
+#    Example:  album: NO PIENSO LLAMAR -> STORM
+#
+# 4. FIX OR ASSIGN MUSIC GENRE (SQLite + Physical metadata):
+#    genre: <Song> -> <New Genre>
+#    Example:  genre: So Payaso -> Hard Rock / Rock
+#    (Or leave without arrow to auto-correct:  genre: Neverita)
+#
+# 5. UPDATE OR UPGRADE LYRICS (Fresh real-time synced .lrc download):
+#    lyrics: <Song>
+#    Example:  lyrics: Bohemian Rhapsody
+#
+# 6. SHIELD / PROMOTE SONG TO PERMANENT (Moves from Conveyor or Cravings to Permanent):
+#    favorite: <Song>  OR  permanente: <Song>
+#    Example:  favorite: Cuica
+#
+# 7. REMOVE / PURGE SONG (Physical deletion from Conveyor or Cravings):
+#    purge: <Song>
+#    Example:  purge: Song I Dislike
+#
+# 8. REPAIR QUESTIONABLE TRACK / AUDIT OFFICIAL VERSION:
+#    fix: <Song Name>
+#    Example:  fix: Me Enamoraste
+#
+# 9. CREATE INSTANT LOCAL RADIO (from your offline collection):
+#    radio: <Vibe or Mood>
+#    Example:  radio: Acoustic chill
+# ==============================================================================
+# WRITE YOUR REQUESTS BELOW:
+"""
+
+DEFAULT_PETICIONES_HEADER = DEFAULT_REQUESTS_HEADER
+
 class StoragePaths:
     """
     Centralizes and resolves all system storage paths
@@ -73,14 +123,18 @@ class StoragePaths:
         return self.peticiones_file
 
     def ensure_dirs(self):
-        """Ensures main directories exist on disk."""
+        """Ensures main directories exist and initializes default requests mailbox if missing."""
         for d in [self.base_dir, self.cinta_dir, self.permanente_dir, self.cravings_dir, self.playlists_dir]:
             os.makedirs(d, exist_ok=True)
-        if not os.path.exists(self.peticiones_file):
+        if not os.path.exists(self.requests_file) or os.path.getsize(self.requests_file) == 0:
             try:
-                open(self.peticiones_file, 'a').close()
+                with open(self.requests_file, 'w', encoding='utf-8') as f:
+                    f.write(DEFAULT_REQUESTS_HEADER)
             except Exception:
-                pass
+                try:
+                    open(self.requests_file, 'a').close()
+                except Exception:
+                    pass
 
     def get_permanente_track_path(self, artist: str, album: str, title: str, ext: str = "opus") -> str:
         """

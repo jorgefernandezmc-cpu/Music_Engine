@@ -15,7 +15,7 @@ from mutagen.oggopus import OggOpus
 from mutagen.mp4 import MP4
 
 from src.db import get_db_connection
-from src.paths import StoragePaths, sanitize_filename
+from src.paths import StoragePaths, sanitize_filename, DEFAULT_REQUESTS_HEADER, DEFAULT_PETICIONES_HEADER
 from src.notifications import send_notification
 from src.album_resolver import get_primary_artist, auto_fix_track, resolve_album_track
 from src.genre_resolver import clean_genre_string, apply_genre_metadata, resolve_genre
@@ -23,55 +23,8 @@ from src.enrich_lyrics import check_and_upgrade_track
 
 logger = logging.getLogger('order_processor')
 
-DEFAULT_PETICIONES_HEADER = """# ==============================================================================
-#                      REMOTE REQUESTS AND COMMANDS MAILBOX
-# ==============================================================================
-# Write your requests or commands at the bottom of this file (one per line).
-# This header is always retained; only completed orders will be cleared.
-# If any order cannot be completed, the reason will be reported right here.
-#
-# 1. REQUEST SONGS (PERMANENT OR TEMPORARY CRAVING):
-#    - Permanent:  Download "Song Title" by Artist  OR  permanent: Artist - Song
-#    - Craving:    craving: Artist - Song  OR  antojo: Artist - Song
-#    - Discovery:  Duki / Melodic techno for workouts (AI catalog -> Permanent)
-#
-# 2. DOWNLOAD FULL ALBUMS (Official full album catalog):
-#    - Permanent album: album: Artist - Album  OR  permanent album: Artist - Album
-#    - Craving album:   craving album: Artist - Album  OR  antojo album: Artist - Album
-#
-# 3. REASSIGN SONG TO OFFICIAL ALBUM (Moves physical files and tags):
-#    album: <Song> -> <Album Name>
-#    Example:  album: NO PIENSO LLAMAR -> STORM
-#
-# 4. FIX OR ASSIGN MUSIC GENRE (SQLite + Physical metadata):
-#    genre: <Song> -> <New Genre>
-#    Example:  genre: So Payaso -> Hard Rock / Rock
-#    (Or leave without arrow to auto-correct:  genre: Neverita)
-#
-# 5. UPDATE OR UPGRADE LYRICS (Fresh real-time synced .lrc download):
-#    lyrics: <Song>
-#    Example:  lyrics: Bohemian Rhapsody
-#
-# 6. SHIELD / PROMOTE SONG TO PERMANENT (Moves from Conveyor or Cravings to Permanent):
-#    favorite: <Song>  OR  permanente: <Song>
-#    Example:  favorite: Cuica
-#
-# 7. REMOVE / PURGE SONG (Physical deletion from Conveyor or Cravings):
-#    purge: <Song>
-#    Example:  purge: Song I Dislike
-#
-# 8. REPAIR QUESTIONABLE TRACK / AUDIT OFFICIAL VERSION:
-#    fix: <Song Name>
-#    Example:  fix: Me Enamoraste
-#
-# 9. CREATE INSTANT LOCAL RADIO (from your offline collection):
-#    radio: <Vibe or Mood>
-#    Example:  radio: Acoustic chill
-# ==============================================================================
-# WRITE YOUR REQUESTS BELOW:
-"""
-
 DEFAULT_ANTOJOS_HEADER = DEFAULT_PETICIONES_HEADER
+
 
 
 class OrderProcessor:
