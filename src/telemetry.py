@@ -31,8 +31,14 @@ class TelemetryEngine:
             
         self.lb_user = os.getenv('LISTENBRAINZ_USER')
         self.lb_token = os.getenv('LISTENBRAINZ_TOKEN')
-        self.base_url = "https://api.listenbrainz.org"
-        self.fuzzy_threshold = 85
+        raw_lb_url = self.config.get('telemetry', {}).get('listenbrainz_url', 'https://api.listenbrainz.org/1').rstrip('/')
+        if re.search(r'/\d+$', raw_lb_url):
+            self.api_url = raw_lb_url
+            self.base_url = re.sub(r'/\d+$', '', raw_lb_url)
+        else:
+            self.base_url = raw_lb_url
+            self.api_url = f"{raw_lb_url}/1"
+        self.fuzzy_threshold = int(self.config.get('telemetry', {}).get('fuzzy_threshold', 80))
         
     def normalize_track_string(self, text: str) -> str:
         """Normalizes track strings removing accents, boilerplate tags, and punctuation."""
@@ -90,7 +96,7 @@ class TelemetryEngine:
         if self.lb_token:
             headers['Authorization'] = f"Token {self.lb_token}"
             
-        url = f"{self.base_url}/1/user/{self.lb_user}/listens"
+        url = f"{self.api_url}/user/{self.lb_user}/listens"
         
         all_listens = []
         max_ts_param = None
@@ -142,7 +148,7 @@ class TelemetryEngine:
         return all_listens
 
     def get_loved_tracks(self) -> list[tuple[str, str]]:
-        url = f"https://api.listenbrainz.org/1/feedback/user/{self.lb_user}/get-feedback"
+        url = f"{self.api_url}/feedback/user/{self.lb_user}/get-feedback"
         params = {"score": 1, "count": 100}
         headers = {}
         if self.lb_token:
@@ -164,7 +170,7 @@ class TelemetryEngine:
                     return []
                     
                 # Fetch recent listens to resolve MSIDs
-                url_ls = f"https://api.listenbrainz.org/1/user/{self.lb_user}/listens"
+                url_ls = f"{self.api_url}/user/{self.lb_user}/listens"
                 msid_map = {}
                 
                 max_ts = None
@@ -202,6 +208,9 @@ class TelemetryEngine:
         Returns (processed_count, orphan_list).
         """
         min_ts = self.get_last_sync_ts()
+        if min_ts == 0:
+            lookback_days = int(self.config.get('telemetry', {}).get('lookback_days', 30))
+            min_ts = int(time.time()) - (lookback_days * 86400)
         listens = self.fetch_listens(min_ts)
         
         if not listens:

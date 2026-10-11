@@ -7,6 +7,7 @@ import base64
 import urllib.request
 import json
 import time
+import random
 from mutagen.oggopus import OggOpus
 from mutagen.flac import Picture
 from mutagen.mp4 import MP4, MP4Cover
@@ -49,7 +50,7 @@ class Downloader:
                 return 0
                 
             base_ydl_opts = {
-                'format': 'bestaudio/best/ba/b',
+                'format': self.dl_config.get('audio_format', 'bestaudio/best'),
                 'writethumbnail': True,
                 'postprocessors': [
                     {'key': 'FFmpegExtractAudio', 'preferredcodec': self.dl_config.get('preferred_codec', 'opus')},
@@ -115,8 +116,10 @@ class Downloader:
                 if download_success:
                     new_status = 'PERMANENT' if is_perm else 'CINTA'
                     actual_path = f_path
-                    if not os.path.exists(actual_path) and os.path.exists(f"{base_path}.m4a"):
-                        actual_path = f"{base_path}.m4a"
+                    fallback_codec = self.dl_config.get('fallback_codec', 'm4a').lstrip('.')
+                    fallback_file = f"{base_path}.{fallback_codec}"
+                    if not os.path.exists(actual_path) and os.path.exists(fallback_file):
+                        actual_path = fallback_file
                         
                     # Apply Mutagen tags upon successful download
                     try:
@@ -216,6 +219,12 @@ class Downloader:
                         WHERE id = ?
                     """, (new_status, actual_path, t_id))
                     downloaded += 1
+                    sleep_min = float(self.dl_config.get('sleep_interval_min', 3))
+                    sleep_max = float(self.dl_config.get('sleep_interval_max', 8))
+                    if sleep_max > 0 and len(pending) > 1 and downloaded < len(pending):
+                        sleep_s = random.uniform(sleep_min, sleep_max)
+                        logger.debug(f"Pacing downloads: sleeping {sleep_s:.2f}s")
+                        time.sleep(sleep_s)
                 else:
                     cursor.execute("UPDATE tracks SET status = 'FAILED' WHERE id = ?", (t_id,))
                         

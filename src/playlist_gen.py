@@ -548,6 +548,9 @@ class PlaylistGenerator:
         Checks whether Permanent or Conveyor directories were physically modified.
         Returns: {'permanente_updated': bool, 'cinta_updated': bool}
         """
+        if not self.config.get('playlists', {}).get('auto_update_on_change', True):
+            return {"permanente_updated": False, "cinta_updated": False}
+
         state = self._load_folder_state()
         saved_perm = state.get("permanente_fingerprint", "")
         saved_cinta = state.get("cinta_fingerprint", "")

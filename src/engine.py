@@ -54,6 +54,7 @@ class MusicEngine:
         self.max_db_backups = self.storage_config.get('max_db_backups', 5)
         self.curation_batch_per_cycle = self.conveyor_config.get('curation_batch_per_cycle', 20)
         self.max_skips_before_purge = self.conveyor_config.get('max_skips_before_purge', 5)
+        self.max_skip_ratio = float(self.conveyor_config.get('max_skip_ratio', 0.7))
         self.cycle_max_downloads = self.downloader_config.get('cycle_max_downloads', 50)
         self.notifications_enabled = self.notif_config.get('enabled', True)
 
@@ -247,7 +248,8 @@ class MusicEngine:
         logger.info(f"Starting engine cycle (fill_mode={fill_mode})")
 
         # 1. Proactive detection of physical folder changes in Permanent or Conveyor
-        self.playlists.check_and_update_if_modified()
+        if self.config.get('playlists', {}).get('auto_update_on_change', True):
+            self.playlists.check_and_update_if_modified()
 
         # 2. Reverse physical synchronization (manual moves and ghost deletions)
         self.file_sync.sync_manual_moves()
@@ -400,8 +402,11 @@ class MusicEngine:
                 cursor.execute(f"""
                     SELECT id, file_path FROM tracks
                     WHERE status = 'CINTA'
-                    AND skip_count >= ?
-                """, (self.max_skips_before_purge,))
+                    AND (
+                        skip_count >= ?
+                        OR (skip_count >= 3 AND (CAST(skip_count AS REAL) / (play_count + skip_count)) >= ?)
+                    )
+                """, (self.max_skips_before_purge, self.max_skip_ratio))
                 to_purge_skip = cursor.fetchall()
 
                 to_purge = list(set(to_purge_time + to_purge_skip))
