@@ -2,6 +2,12 @@
 
 This document centralizes the full technical, architectural, functional, and operational knowledge of the **Music Engine (The Musical Conveyor Belt)** project. It serves as the single, canonical reference for developers and AI agents maintaining or extending the system.
 
+> [!IMPORTANT]
+> ### 🤖 Mandatory Directives for AI Agents & Contributors:
+> 1. **Code & Commits in English Only:** All code, class/function names, variables, docstrings, inline comments, log output, and git commit messages must be strictly written in English.
+> 2. **Data Privacy & `.gitignore` Enforcement:** Never commit personal user data, runtime databases, cache, audio files, credentials, or private state to Git. If introducing any new state, database, or cache file, you **must** verify and ensure it is properly excluded in `.gitignore`.
+> 3. **Documentation Sync:** Whenever changes are made to the code, database schema, CLI options, architecture, or configuration, you **must** update both `CONTEXT.md` and `README.md` to reflect the changes accurately.
+
 ---
 
 ## 1. Project Overview
@@ -345,3 +351,26 @@ All commands are executed through `main.py` using the Python virtual environment
 # Classify and embed exact music genres into metadata and SQLite
 .venv/bin/python main.py enrich-genres [--limit 50] [--all] [--force-all] [--no-ai]
 ```
+
+---
+
+## 9. AI Agent & Developer Operating Principles
+
+To maintain codebase cleanliness, user privacy, and architectural consistency over time, every AI coding assistant and human contributor must follow these non-negotiable guidelines:
+
+### 1. English-Only Development Standard
+- **Codebase:** All newly authored Python modules, classes, functions, variable names, and constants must be in clear English.
+- **Documentation & Comments:** Docstrings, inline code comments, and terminal/log outputs must be written in English.
+- **Git Commits:** Every git commit message must be in English following conventional commit patterns (e.g., `feat: ...`, `fix: ...`, `refactor: ...`, `chore: ...`).
+
+### 2. Privacy, Git Hygiene & Zero Data Leakage
+- **Never Commit User Data:** The Git repository is publicly shareable and open-source ready. Under no circumstances should real personal databases (`*.sqlite`), backups (`data/backups/`), runtime states (`download_archive.txt`, `taste_profile.json`), authentication tokens (`.env`), cookies (`cookies.txt`), headers (`headers_auth.json`), or audio files (`.opus`, `.m4a`, etc.) be committed or tracked.
+- **Proactive `.gitignore` Updates:** When introducing any new feature that produces runtime state, caches, test artifacts, or temporary files, the developer/agent **must verify and update `.gitignore` immediately** before staging files.
+
+### 3. Continuous Documentation Synchronization
+- **Always Keep Docs in Sync:** Whenever code, schema tables, configuration options (`config.yaml`), environment variables (`.env`), CLI flags, or lifecycle behaviors are modified, the agent **must update both `CONTEXT.md` and `README.md`**.
+- `CONTEXT.md` acts as the deep architectural source of truth, while `README.md` serves as the user-facing installation and operational guide. Neither should ever be left outdated.
+
+### 4. Linux Portability & Non-Blocking Design
+- All filesystem access must resolve user homes dynamically via `~` or `os.path.expanduser()` (managed centrally in `src/paths.py`).
+- Desktop notifications (`notify-send`) and external CLI utilities must be non-blocking and wrapped in fail-safe try/catch blocks so the engine runs flawlessly across all Linux distributions, window managers, Wayland/X11 compositors, and headless servers.
