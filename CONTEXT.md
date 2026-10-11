@@ -129,13 +129,13 @@ Music_Engine/
     └── cli.py                  # CLI argument parsing and subcommands
 ```
 
-### Audio Paths (Storage in `Canciones/`)
+### Audio Paths (Storage Hierarchy)
 The root music directory is configured in `config/config.yaml` (`storage.base_dir`):
-- **`Canciones/Cinta/`**: `<Artist> - <Title>.opus` (Ephemeral discovery rotating buffer).
-- **`Canciones/Permanente/`**: `<Primary_Artist>/<Album>/<Primary_Artist> - <Title>.opus` and `.lrc`.
-  - **Strict rule:** No intermediate discovery or favorites subdirectories inside Permanente. Everything is organized strictly by Primary Artist and Album.
-- **`Canciones/Playlists/`**: Core `.m3u8` playlists (`Cinta.m3u8`, `Permanente.m3u8`, `Rotación_Viva.m3u8`), subfolder `Playlists/Artistas/` with individual artist playlists, and native Lune backup (`lune_playlists_backup.json`).
-- **`Canciones/peticiones.txt`**: Remote mailbox synced via Syncthing (orders, commands, and track requests).
+- **`Conveyor/` (or `Cinta/`)**: `<Artist> - <Title>.opus` (Ephemeral discovery rotating buffer).
+- **`Permanent/` (or `Permanente/`)**: `<Primary_Artist>/<Album>/<Primary_Artist> - <Title>.opus` and `.lrc`.
+  - **Strict rule:** No intermediate discovery or favorites subdirectories inside Permanent. Everything is organized strictly by Primary Artist and Album.
+- **`Playlists/`**: Core `.m3u8` playlists, subfolder `Playlists/Artistas/` with individual artist playlists, and optional native Lune backup (`lune_playlists_backup.json`).
+- **`requests.txt` (or `peticiones.txt`)**: Remote mailbox synced via Syncthing (orders, commands, and track requests).
 
 ---
 

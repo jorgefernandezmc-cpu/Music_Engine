@@ -36,26 +36,33 @@ class StoragePaths:
         base = storage_cfg.get('base_dir', '~/Music')
         self.base_dir = os.path.abspath(os.path.expanduser(base))
         
-        # Main subdirectories
-        cinta = storage_cfg.get('cinta_dir', storage_cfg.get('conveyor_dir', 'Cinta'))
-        permanente = storage_cfg.get('permanente_dir', storage_cfg.get('permanent_dir', 'Permanente'))
+        # Main subdirectories (English defaults with transparent backward compatibility)
+        conveyor = storage_cfg.get('conveyor_dir', storage_cfg.get('cinta_dir', 'Conveyor'))
+        permanent = storage_cfg.get('permanent_dir', storage_cfg.get('permanente_dir', 'Permanent'))
         playlists = storage_cfg.get('playlists_dir', 'Playlists')
-        peticiones_file = storage_cfg.get('peticiones_file', storage_cfg.get('requests_file', storage_cfg.get('antojos_file', 'peticiones.txt')))
+        requests_file = storage_cfg.get('requests_file', storage_cfg.get('peticiones_file', storage_cfg.get('antojos_file', 'requests.txt')))
         
-        self.cinta_dir = os.path.join(self.base_dir, cinta)
-        self.conveyor_dir = self.cinta_dir
-        self.permanente_dir = os.path.join(self.base_dir, permanente)
-        self.permanent_dir = self.permanente_dir
+        self.conveyor_dir = os.path.join(self.base_dir, conveyor)
+        self.cinta_dir = self.conveyor_dir
+        self.permanent_dir = os.path.join(self.base_dir, permanent)
+        self.permanente_dir = self.permanent_dir
         self.playlists_dir = os.path.join(self.base_dir, playlists)
         
-        # Requests mailbox file
+        # Requests mailbox file (English default: requests.txt, with fallback to peticiones.txt if present)
+        cand_configured = os.path.join(self.base_dir, requests_file)
         cand_peticiones = os.path.join(self.base_dir, 'peticiones.txt')
-        cand_configured = os.path.join(self.base_dir, peticiones_file)
-        if os.path.exists(cand_peticiones):
-            self.peticiones_file = cand_peticiones
+        cand_requests = os.path.join(self.base_dir, 'requests.txt')
+        
+        if os.path.exists(cand_configured):
+            self.requests_file = cand_configured
+        elif os.path.exists(cand_peticiones):
+            self.requests_file = cand_peticiones
+        elif os.path.exists(cand_requests):
+            self.requests_file = cand_requests
         else:
-            self.peticiones_file = cand_configured
-        self.requests_file = self.peticiones_file
+            self.requests_file = cand_configured
+            
+        self.peticiones_file = self.requests_file
             
     @property
     def antojos_file(self) -> str:

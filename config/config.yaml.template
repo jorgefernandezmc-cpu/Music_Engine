@@ -13,12 +13,12 @@ storage:
   base_dir: "~/Music/Songs"
   
   # Subfolders relative to base_dir:
-  cinta_dir: "Cinta"              # Discovery buffer and temporary rotation
-  permanente_dir: "Permanente"    # Permanent collection organized by Artist/Album
+  conveyor_dir: "Conveyor"        # Discovery buffer and temporary rotation (cinta_dir also supported)
+  permanent_dir: "Permanent"      # Permanent collection organized by Artist/Album (permanente_dir also supported)
   playlists_dir: "Playlists"      # Destination where .m3u8 playlists are generated
   
   # Interactive mailbox file for remote commands and requests:
-  peticiones_file: "peticiones.txt"
+  requests_file: "requests.txt"   # Mailbox file for orders and downloads (peticiones_file also supported)
   
   # Safety mechanism against unintended mass deletions:
   mass_deletion_failsafe_limit: 50

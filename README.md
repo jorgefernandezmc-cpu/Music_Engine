@@ -178,10 +178,10 @@ storage:
   # Base directory where music will reside (~ expands to your user's home folder):
   base_dir: "~/Music/Songs"
   
-  cinta_dir: "Cinta"              # Temporary discovery buffer
-  permanente_dir: "Permanente"    # Permanent library
+  conveyor_dir: "Conveyor"        # Temporary discovery buffer (or "Cinta")
+  permanent_dir: "Permanent"      # Permanent library (or "Permanente")
   playlists_dir: "Playlists"      # Generated .m3u8 playlists
-  peticiones_file: "peticiones.txt" # Remote commands mailbox file
+  requests_file: "requests.txt"   # Remote commands mailbox file (or "peticiones.txt")
   mass_deletion_failsafe_limit: 50
   max_db_backups: 5
 
@@ -307,9 +307,9 @@ For convenient execution without typing full commands:
 
 ---
 
-## 📱 Remote Control Mailbox (`peticiones.txt`)
+## 📱 Remote Control Mailbox (`requests.txt` / `peticiones.txt`)
 
-Inside the root of your synced music directory (`base_dir`), the engine monitors `peticiones.txt`. You can edit this file from your mobile phone to issue commands or request tracks:
+Inside the root of your synced music directory (`base_dir`), the engine monitors `requests.txt` (or `peticiones.txt`). You can edit this file from your mobile phone to issue commands or request tracks:
 
 ```text
 # 1. Download directly to Permanent library:
