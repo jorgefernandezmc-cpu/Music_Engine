@@ -9,23 +9,31 @@ from src.paths import StoragePaths
 from src.db import get_db_connection
 
 class PlaylistGenerator:
-    def __init__(self, db_path: str = "data/conveyor_state.sqlite", config_or_storage: str = "config/config.yaml"):
+    def __init__(self, db_path: str = "data/conveyor_state.sqlite", config_or_storage="config/config.yaml"):
         self.db_path = db_path
         if isinstance(config_or_storage, StoragePaths):
             self.paths = config_or_storage
+            self.config = getattr(config_or_storage, 'config', {}) or {}
+            self.config_path = getattr(config_or_storage, 'config_path', "config/config.yaml")
+            if not self.config:
+                self.config = self._load_config()
+        elif isinstance(config_or_storage, dict):
+            self.paths = StoragePaths(config_or_storage)
+            self.config = config_or_storage
             self.config_path = "config/config.yaml"
-        elif os.path.exists(config_or_storage) and (config_or_storage.endswith('.yaml') or config_or_storage.endswith('.yml')):
+        elif isinstance(config_or_storage, str) and os.path.exists(config_or_storage):
             self.paths = StoragePaths(config_or_storage)
             self.config_path = config_or_storage
+            self.config = self._load_config()
         else:
             self.paths = StoragePaths("config/config.yaml")
             self.config_path = "config/config.yaml"
+            self.config = self._load_config()
             
         self.playlists_dir = self.paths.playlists_dir
         self.artists_dir = os.path.join(self.playlists_dir, "Artistas")
         os.makedirs(self.playlists_dir, exist_ok=True)
         os.makedirs(self.artists_dir, exist_ok=True)
-        self.config = self._load_config()
         self.lune_playlists = {}
         self.state_file = "data/playlist_folder_state.json"
         self._meta_cache = {}
@@ -415,7 +423,7 @@ class PlaylistGenerator:
           "lyrics": []
         }
         """
-        if not self.config.get('playlists', {}).get('generate_lune_backup', True):
+        if not self.config.get('playlists', {}).get('generate_lune_backup', False):
             return
 
         lune_json_path = os.path.join(self.playlists_dir, "lune_playlists_backup.json")

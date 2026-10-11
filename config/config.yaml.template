@@ -9,7 +9,8 @@
 # ------------------------------------------------------------------------------
 storage:
   # Absolute base path where your synced music collection resides:
-  base_dir: "/home/your_user/Music/Songs"
+  # Uses ~ for automatic expansion to current user's home directory.
+  base_dir: "~/Music/Songs"
   
   # Subfolders relative to base_dir:
   cinta_dir: "Cinta"              # Discovery buffer and temporary rotation
@@ -129,8 +130,8 @@ genres:
 # ------------------------------------------------------------------------------
 playlists:
   auto_update_on_change: true
-  generate_lune_backup: true
-  lune_include_artists: false
+  generate_lune_backup: false    # Set to true if you use Lune Android player for JSON playlist backup
+  lune_include_artists: false   # Include per-artist playlists in Lune backup (if generate_lune_backup is true)
   min_artist_tracks: 10
 
 # ------------------------------------------------------------------------------

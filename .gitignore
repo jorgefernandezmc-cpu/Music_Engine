@@ -7,7 +7,16 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+
+# Testing, Coverage & Linters
 .pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.cache/
+.mypy_cache/
+.ruff_cache/
 
 # Virtual Environment
 .venv/
@@ -21,6 +30,8 @@ venv.bak/
 .env
 config/.env
 *.env
+!config/.env.template
+!*.env.template
 *.pem
 *.key
 
@@ -33,25 +44,45 @@ config/headers_auth.json
 !config/.env.template
 !config/config.yaml.template
 
-# SQLite Database, Locks, Backups & Runtime State
-data/*.sqlite
-data/*.sqlite-shm
-data/*.sqlite-wal
-data/*.db
-data/*.lock
-data/backups/
-data/download_archive.txt
-data/playlist_folder_state.json
-data/taste_profile.json
-
-# Keep data directory and templates tracked
+# Runtime Data, SQLite Databases, Backups & State
+data/*
 !data/.gitkeep
 !data/*.template
+!data/backups/
+data/backups/*
+!data/backups/.gitkeep
+*.sqlite
+*.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+*.db
+*.lock
+
+# Audio, Lyrics & Playlist Files (Prevent accidental commit of personal media)
+*.opus
+*.m4a
+*.mp3
+*.flac
+*.ogg
+*.wav
+*.aac
+*.wma
+*.lrc
+*.m3u
+*.m3u8
+lune_playlists_backup.json
 
 # Logs
-logs/*.log
-*.log
+logs/*
 !logs/.gitkeep
+*.log
+
+# Build & Packaging
+build/
+dist/
+downloads/
+*.egg-info/
+.eggs/
 
 # IDEs, Editors & OS Files
 .vscode/
@@ -59,6 +90,9 @@ logs/*.log
 *.swp
 *.swo
 *~
+*.bak
+*.tmp
+*.temp
 .DS_Store
 .DS_Store?
 ._*

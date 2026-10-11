@@ -84,7 +84,7 @@ def main():
 
     subparsers.add_parser("sync-telemetry", help="Synchronizes scrobbles without downloading audio")
     subparsers.add_parser("status", help="Displays database status and disk usage")
-    subparsers.add_parser("update-playlists", help="Regenerates all .m3u8 playlists and Lune backup")
+    subparsers.add_parser("update-playlists", help="Regenerates all .m3u8 playlists (and Lune backup if enabled in config)")
     watch_p = subparsers.add_parser("watch-folders", help="Monitors folder changes in Permanent and Conveyor, updating playlists in real time")
     watch_p.add_argument("--interval", type=int, default=5, help="Interval in seconds between checks (default: 5)")
     
@@ -116,20 +116,16 @@ def main():
         from dotenv import load_dotenv
         load_dotenv("config/.env")
         
-        missing = []
-        if not os.getenv("GEMINI_API_KEY") or "your_" in os.getenv("GEMINI_API_KEY", ""):
-            missing.append("GEMINI_API_KEY")
-        if not os.getenv("LISTENBRAINZ_USER") or "your_" in os.getenv("LISTENBRAINZ_USER", ""):
-            missing.append("LISTENBRAINZ_USER")
-        if not os.getenv("LISTENBRAINZ_TOKEN") or "your_" in os.getenv("LISTENBRAINZ_TOKEN", ""):
-            missing.append("LISTENBRAINZ_TOKEN")
-            
-        if missing:
-            print("ERROR: Critical environment variables missing in config/.env or containing default values:")
-            for m in missing:
-                print(f" - {m}")
-            print("\nPlease edit config/.env and configure them before continuing.")
+        gemini_key = os.getenv("GEMINI_API_KEY")
+        if not gemini_key or "your_" in gemini_key:
+            print("ERROR: GEMINI_API_KEY is missing or contains default placeholder in config/.env.")
+            print("Please edit config/.env and configure your Gemini API key before continuing.")
             sys.exit(1)
+            
+        lb_user = os.getenv("LISTENBRAINZ_USER")
+        lb_token = os.getenv("LISTENBRAINZ_TOKEN")
+        if not lb_user or "your_" in lb_user or not lb_token or "your_" in lb_token:
+            print("[Info] ListenBrainz credentials not configured in config/.env. Continuing without telemetry scrobble sync.")
             
         engine = MusicEngine(db_path, config_path)
         engine.run(fill_mode=args.fill)

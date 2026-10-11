@@ -21,7 +21,9 @@ class StoragePaths:
     def __init__(self, config_or_path="config/config.yaml"):
         if isinstance(config_or_path, dict):
             self.config = config_or_path
+            self.config_path = "config/config.yaml"
         else:
+            self.config_path = str(config_or_path)
             if os.path.exists(config_or_path):
                 with open(config_or_path, 'r', encoding='utf-8') as f:
                     self.config = yaml.safe_load(f) or {}

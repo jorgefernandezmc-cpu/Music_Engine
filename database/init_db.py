@@ -6,8 +6,10 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from src.db import get_db_connection, ensure_db_indexes
 
-os.makedirs("data", exist_ok=True)
-db_path = "data/conveyor_state.sqlite"
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+data_dir = os.path.join(PROJECT_ROOT, "data")
+os.makedirs(data_dir, exist_ok=True)
+db_path = os.path.join(data_dir, "conveyor_state.sqlite")
 schema_path = os.path.join(os.path.dirname(__file__), "schema.sql")
 
 print("Initializing database with WAL mode and indices...")
