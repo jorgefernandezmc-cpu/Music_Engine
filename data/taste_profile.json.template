@@ -1,0 +1,11 @@
+{
+  "total_tracks": 0,
+  "top_artists": {
+    "YourFavoriteArtist": 10
+  },
+  "genre_seeds": [
+    "Pop",
+    "Rock",
+    "Hip Hop"
+  ]
+}

@@ -11,8 +11,11 @@ CREATE TABLE IF NOT EXISTS tracks (
     play_count INTEGER DEFAULT 0,
     skip_count INTEGER DEFAULT 0,
     file_path TEXT,
-    genre TEXT
+    genre TEXT,
+    track_number INTEGER,
+    release_date TEXT
 );
+
 CREATE TABLE IF NOT EXISTS listen_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     track_id TEXT NOT NULL,
@@ -20,10 +23,12 @@ CREATE TABLE IF NOT EXISTS listen_events (
     source TEXT,
     FOREIGN KEY(track_id) REFERENCES tracks(id)
 );
+
 CREATE TABLE IF NOT EXISTS system_metadata (
     key TEXT PRIMARY KEY,
     value TEXT
 );
+
 CREATE TABLE IF NOT EXISTS orphan_scrobbles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     artist TEXT,
@@ -31,3 +36,20 @@ CREATE TABLE IF NOT EXISTS orphan_scrobbles (
     attempts INTEGER DEFAULT 0,
     UNIQUE(artist, title)
 );
+
+CREATE TABLE IF NOT EXISTS artist_genres (
+    artist TEXT PRIMARY KEY,
+    genre TEXT NOT NULL,
+    source TEXT NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- High-performance indices to accelerate frequent queries
+CREATE INDEX IF NOT EXISTS idx_tracks_status ON tracks(status);
+CREATE INDEX IF NOT EXISTS idx_tracks_status_perm ON tracks(status, is_permanent);
+CREATE INDEX IF NOT EXISTS idx_tracks_file_path ON tracks(file_path);
+CREATE INDEX IF NOT EXISTS idx_tracks_artist_title ON tracks(artist, title);
+CREATE INDEX IF NOT EXISTS idx_tracks_play_count ON tracks(play_count);
+
+CREATE INDEX IF NOT EXISTS idx_listen_events_track_id ON listen_events(track_id);
+CREATE INDEX IF NOT EXISTS idx_listen_events_listened_at ON listen_events(listened_at);

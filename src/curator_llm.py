@@ -1,5 +1,4 @@
 import os
-import sqlite3
 import logging
 import math
 import yaml
@@ -9,6 +8,9 @@ from google import genai
 from google.genai import types
 from ytmusicapi import YTMusic
 from thefuzz import fuzz
+from src.paths import StoragePaths, sanitize_filename
+from src.album_resolver import resolve_album_track
+from src.db import get_db_connection
 
 os.makedirs('logs', exist_ok=True)
 logger = logging.getLogger('curator')
@@ -19,35 +21,40 @@ if not logger.handlers:
     logger.setLevel(logging.INFO)
 
 class TrackRecommendation(BaseModel):
-    artist: str = Field(description="Nombre del artista")
-    title: str = Field(description="Título de la canción")
-    genre_context: str = Field(description="OBLIGATORIO elegir UNO de estos exactos: 'Urbano', 'Hip-Hop/Rap', 'Pop & Indie', 'Electrónica', 'Rock', 'R&B / Soul', 'Tropical & Raíces', 'Soundtracks', 'Variado'. REGLA CRÍTICA: El género 'Urbano' tiene PRIORIDAD ABSOLUTA. Si una canción (por ejemplo de Rauw Alejandro, Mora, etc.) está en la frontera entre Urbano y R&B/Soul o Tropical, DEBE ser clasificada como 'Urbano'.")
-    discovery_type: str = Field(description="Debe ser exactamente uno de: exploitation, adjacent, exploration")
-    reason: str = Field(description="Breve justificación de por qué encaja en los gustos del usuario")
+    artist: str = Field(description="Artist name")
+    title: str = Field(description="Song title")
+    genre_context: str = Field(description="Precise, standard music genre(s) for the track, separated by ' / ' if multiple (e.g. 'Reggaeton / Trap Latino', 'Indie Rock / Pop', 'Rock', 'Pop / R&B', 'Electronic / House', 'Hip-Hop / Rap'). Must be accurate and descriptive.")
+    discovery_type: str = Field(description="Must be exactly one of: exploitation, adjacent, exploration")
+    reason: str = Field(description="Brief justification of why it matches the user's taste")
 
 class RecommendationList(BaseModel):
     tracks: list[TrackRecommendation]
 
 class IntentAction(BaseModel):
-    action_type: str = Field(description="OBLIGATORIO: Uno de 'artist_hits', 'album_tracks', o 'playlist_vibe'")
-    search_query: str = Field(description="Término exacto de búsqueda para YouTube Music (ej. 'Daniela Garsal' o 'La Jauría Dani Fernández')")
-    folder_name: str = Field(description="Nombre de la carpeta para agrupar estas pistas (ej. Daniela_Garsal_Hits)")
-    limit: int = Field(description="Cantidad máxima de pistas a extraer (ej. 20 para hits, 40 para playlists)")
-    genre_context: str = Field(description="OBLIGATORIO elegir UNO de estos exactos: 'Urbano', 'Hip-Hop/Rap', 'Pop & Indie', 'Electrónica', 'Rock', 'R&B / Soul', 'Tropical & Raíces', 'Soundtracks', 'Variado'")
+    action_type: str = Field(description="MANDATORY: One of 'track', 'artist_hits', 'album_tracks', or 'playlist_vibe'")
+    search_query: str = Field(description="Exact search query for YouTube Music (e.g. 'Quevedo Columbia', 'Daniela Garsal' or 'La Jauria Dani Fernandez')")
+    folder_name: str = Field(description="Folder name to group these tracks (e.g. Favorites, Daniela_Garsal_Hits)")
+    limit: int = Field(description="Maximum tracks to extract (e.g. 20 for hits, 40 for playlists)")
+    genre_context: str = Field(description="Precise music genre(s) for the request separated by ' / ' if applicable (e.g. 'Reggaeton / Trap Latino', 'Indie Rock / Pop', 'Rock', etc.)")
 
 class IntentActionList(BaseModel):
     actions: list[IntentAction]
 
-class AntojoGroup(BaseModel):
-    folder_name: str = Field(description="Nombre de subcarpeta sin espacios (ej. Bad_Bunny_Ultimo_Album)")
+class RequestGroup(BaseModel):
+    folder_name: str = Field(description="Descriptive name for the request (e.g. Favorites, Rock_Espanol)")
     tracks: list[TrackRecommendation]
 
+PeticionGroup = RequestGroup
+AntojoGroup = RequestGroup
+
 class IntentRecommendationList(BaseModel):
-    groups: list[AntojoGroup]
+    groups: list[RequestGroup]
 
 class CuratorLLM:
     def __init__(self, db_path: str, config_path: str = "config/config.yaml"):
         self.db_path = db_path
+        self.paths = StoragePaths(config_path)
+        self.paths.ensure_dirs()
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
             
@@ -57,8 +64,8 @@ class CuratorLLM:
             
         api_key = os.getenv("GEMINI_API_KEY")
         self.client = genai.Client(api_key=api_key) if api_key and "your_" not in api_key else None
-        self.model_name = self.config.get('llm', {}).get('model', 'gemini-3.6-flash')
-        self.max_api_calls = 18 # Límite por ejecución para guardar peticiones para "antojos"
+        self.model_name = self.config.get('llm', {}).get('model', 'gemini-3.5-flash')
+        self.max_api_calls = 18 # Per-run safety limit to protect quota
         self.api_calls_made = 0
         self.weights = self.config.get('llm', {}).get('diversity_weights', {
             'exploitation': 0.60, 'adjacent': 0.25, 'exploration': 0.15
@@ -66,12 +73,10 @@ class CuratorLLM:
         self.yt = YTMusic()
         
     def sanitize_filename(self, name: str) -> str:
-        if not name: return "Unknown"
-        name = re.sub(r'[/\\:*?"<>|]', '-', name)
-        return name.strip('. ')
+        return sanitize_filename(name)
 
     def _get_context(self):
-        with sqlite3.connect(self.db_path) as conn:
+        with get_db_connection(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT artist, SUM(play_count) as total 
@@ -91,7 +96,7 @@ class CuratorLLM:
         return top_historico, top_reciente
 
     def _get_seeds(self):
-        with sqlite3.connect(self.db_path) as conn:
+        with get_db_connection(self.db_path) as conn:
             cursor = conn.cursor()
             
             # Conservative (High plays)
@@ -102,7 +107,7 @@ class CuratorLLM:
             cursor.execute("SELECT id, artist, title FROM tracks WHERE play_count BETWEEN 1 AND 4 ORDER BY RANDOM() LIMIT 1")
             med_seeds = cursor.fetchall()
             
-            # Exploration (0 plays, or lowest 20% artists)
+            # Exploration (0 plays, or lower 20% artists)
             cursor.execute("""
                 SELECT id, artist, title FROM tracks 
                 WHERE play_count = 0 AND status IN ('CINTA', 'PERMANENT') 
@@ -125,20 +130,20 @@ class CuratorLLM:
 
     def generate_recommendations(self, slots_needed: int) -> list[TrackRecommendation]:
         if not self.client:
-            logger.warning("Gemini no configurado.")
+            logger.warning("Gemini not configured.")
             return []
             
         if self.api_calls_made >= self.max_api_calls:
-            logger.warning(f"Límite de seguridad alcanzado ({self.max_api_calls} peticiones a Gemini).")
+            logger.warning(f"Safety limit reached ({self.max_api_calls} requests to Gemini).")
             return []
             
         seeds = self._get_seeds()
         if not seeds:
-            logger.warning("No hay semillas en BD.")
+            logger.warning("No seeds found in DB.")
             return []
             
         candidates = []
-        with sqlite3.connect(self.db_path) as conn:
+        with get_db_connection(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT id FROM tracks")
             existing_ids = {row[0] for row in cursor.fetchall()}
@@ -146,8 +151,9 @@ class CuratorLLM:
         import random
         
         for seed_id, s_artist, s_title in seeds:
+            clean_seed_id = seed_id.split('_')[0] if seed_id else ''
             try:
-                radio = self.yt.get_watch_playlist(videoId=seed_id, limit=25)
+                radio = self.yt.get_watch_playlist(videoId=clean_seed_id, limit=25)
                 if 'tracks' in radio:
                     for t in radio['tracks']:
                         vid = t.get('videoId')
@@ -156,14 +162,14 @@ class CuratorLLM:
                                 'id': vid,
                                 'title': t.get('title', ''),
                                 'artist': t.get('artists', [{'name': ''}])[0].get('name', ''),
-                                'seed_context': f"Radio de {s_artist} - {s_title}"
+                                'seed_context': f"Radio of {s_artist} - {s_title}"
                             })
                             existing_ids.add(vid)
             except Exception as e:
-                logger.error(f"Error extrayendo radio YTM para {seed_id}: {e}")
+                logger.error(f"Error extracting YTM radio for {seed_id}: {e}")
                 
         if not candidates:
-            logger.warning("YTMusic no devolvió candidatos válidos.")
+            logger.warning("YTMusic did not return valid candidates.")
             return []
             
         random.shuffle(candidates)
@@ -171,26 +177,26 @@ class CuratorLLM:
         
         top_hist, top_rec = self._get_context()
         
-        candidate_text = "\n".join([f"[{i}] {c['artist']} - {c['title']} (Origen: {c['seed_context']})" for i, c in enumerate(candidates)])
+        candidate_text = "\n".join([f"[{i}] {c['artist']} - {c['title']} (Origin: {c['seed_context']})" for i, c in enumerate(candidates)])
         
         prompt = f"""
-        Actúa como un curador musical profesional. Aquí tienes {len(candidates)} canciones obtenidas de radios relacionadas con la base del usuario.
+        Act as a professional music curator. Here are {len(candidates)} candidate tracks retrieved from radios related to the user's taste base.
         
-        PERFIL DEL USUARIO:
-        Artistas Top Históricos: {', '.join(top_hist) if top_hist else 'Desconocido'}
-        Artistas en Rotación Reciente: {', '.join(top_rec) if top_rec else 'Desconocido'}
+        USER TASTE PROFILE:
+        Top Historic Artists: {', '.join(top_hist) if top_hist else 'Unknown'}
+        Artists in Recent Rotation: {', '.join(top_rec) if top_rec else 'Unknown'}
         
-        INSTRUCCIONES ESTRICTAS:
-        1. Analiza cada una de las canciones candidatas listadas abajo.
-        2. Puntúa internamente (del 0 al 100) cómo encajan con el perfil del usuario.
-        3. DESCARTA toda la basura hiper-comercial genérica que no encaje, o canciones que se alejen demasiado de su estilo (salvo que sea para exploración controlada).
-        4. DEVUELVE ÚNICAMENTE las canciones que superen los 85 puntos de calidad y afinidad.
-        5. Para cada canción que apruebes, mantén EXACTAMENTE el mismo Artista y Título.
+        STRICT INSTRUCTIONS:
+        1. Analyze each candidate track listed below.
+        2. Internally score (from 0 to 100) how well each track fits the user's taste profile.
+        3. DISCARD all generic hyper-commercial filler that doesn't fit, or songs deviating too far from their style (unless suitable for controlled exploration).
+        4. RETURN ONLY songs that exceed 85 points in quality and affinity.
+        5. For each approved song, keep EXACTLY the same Artist and Title.
         
-        CANDIDATOS:
+        CANDIDATES:
         {candidate_text}
         
-        Devuelve SOLO JSON válido cumpliendo el esquema solicitado.
+        Return ONLY valid JSON complying with the requested schema.
         """
         
         self.api_calls_made += 1
@@ -211,57 +217,52 @@ class CuratorLLM:
                 data = json.loads(response.text)
                 tracks = [TrackRecommendation(**t) for t in data.get('tracks', [])]
                 
-            logger.info(f"Curador Híbrido (Pro) filtró {len(candidates)} candidatos y aprobó {len(tracks)} pistas estelares.")
+            logger.info(f"Hybrid Curator filtered {len(candidates)} candidates and approved {len(tracks)} stellar tracks.")
             return tracks
             
         except Exception as e:
-            logger.error(f"Error generando o parseando recomendaciones del LLM: {e}")
+            logger.error(f"Error generating or parsing LLM recommendations: {e}")
             import time
-            time.sleep(15) # Evitar ametrallar a la API si nos da un 429
+            time.sleep(15) # Avoid hammering API if rate limited
             return []
-
 
     def validate_and_save(self, candidates: list[TrackRecommendation], target_folder: str = "Cinta", target_status: str = "PENDING") -> int:
         valid_count = 0
-        with sqlite3.connect(self.db_path) as conn:
+        with get_db_connection(self.db_path) as conn:
             cursor = conn.cursor()
             for rec in candidates:
-                query = f"{rec.artist} {rec.title}"
-                try:
-                    search_results = self.yt.search(query, filter="songs", limit=1)
-                except Exception as e:
-                    logger.error(f"Error en búsqueda YT para '{query}': {e}")
-                    continue
-                    
-                if not search_results:
-                    logger.info(f"Descartado '{query}': No encontrado en YouTube Music")
-                    continue
-                    
-                top_result = search_results[0]
-                r_title = top_result.get('title', '')
-                r_artist = top_result.get('artists', [{'name': ''}])[0].get('name', '')
-                
-                sim = fuzz.token_set_ratio(query.lower(), f"{r_artist} {r_title}".lower())
-                if sim < 80:
-                    logger.info(f"Descartado '{query}': Similitud insuficiente ({sim}%) contra '{r_artist.lower()} {r_title.lower()}'")
-                    continue
-                    
-                vid = top_result.get('videoId')
+                # Prioritize album version
+                resolved = resolve_album_track(self.yt, rec.artist, rec.title)
+                vid = resolved.get('id')
                 if not vid:
+                    logger.info(f"Discarded '{rec.artist} - {rec.title}': Not found on YouTube Music")
                     continue
                     
-                r_album = top_result.get('album', {}).get('name') if top_result.get('album') else None
-                r_duration = top_result.get('duration_seconds', 0)
+                r_title = resolved['title']
+                r_artist = resolved['artist']
+                r_primary_artist = resolved.get('primary_artist', r_artist)
+                r_album = resolved['album']
+                r_duration = resolved['duration_seconds']
                 
                 safe_title = self.sanitize_filename(r_title)
-                safe_artist = self.sanitize_filename(r_artist)
-                file_path = f"storage/{target_folder}/{safe_artist} - {safe_title}.opus"
+                safe_artist = self.sanitize_filename(r_primary_artist)
+                safe_album = self.sanitize_filename(r_album)
+                
+                if target_folder in ("Cinta", "Conveyor"):
+                    file_path = self.paths.get_cinta_track_path(safe_artist, safe_title)
+                    # STRICT RULE: Never download to Conveyor tracks already present in Permanent
+                    cursor.execute("SELECT id FROM tracks WHERE status = 'PERMANENT' AND (LOWER(title) = LOWER(?) OR LOWER(id) = LOWER(?))", (r_title, vid))
+                    if cursor.fetchone():
+                        logger.info(f"Discarded for Conveyor '{r_artist} - {r_title}': Already exists in Permanent.")
+                        continue
+                else:
+                    file_path = self.paths.get_permanente_track_path(safe_artist, safe_album, safe_title)
                 
                 # Check if file_path (case-insensitive) already exists to prevent Android Syncthing conflicts
                 cursor.execute("SELECT id FROM tracks WHERE LOWER(file_path) = LOWER(?)", (file_path,))
                 dup_row = cursor.fetchone()
                 if dup_row and dup_row[0] != vid:
-                    logger.info(f"Descartado '{query}': Ya existe un archivo casi idéntico en la BD (ID: {dup_row[0]}). Evitando conflicto de sincronización en Android.")
+                    logger.info(f"Discarded '{rec.artist} - {rec.title}': Near-identical file already in DB (ID: {dup_row[0]}). Preventing Android sync conflict.")
                     continue
 
                 cursor.execute("SELECT status, file_path FROM tracks WHERE id = ?", (vid,))
@@ -271,72 +272,51 @@ class CuratorLLM:
                     current_path = row[1]
                     
                     if current_status == 'ARCHIVED':
-                        logger.info(f"Resucitando pista archivada '{query}' (ID: {vid})")
+                        logger.info(f"Resurrecting archived track '{rec.artist} - {rec.title}' (ID: {vid})")
                         cursor.execute("""
                             UPDATE tracks 
-                            SET status = ?, file_path = ?, is_permanent = 0
+                            SET status = ?, file_path = ?, is_permanent = 0, album = ?
                             WHERE id = ?
-                        """, (target_status, file_path, vid))
+                        """, (target_status, file_path, r_album, vid))
                         valid_count += 1
-                    elif target_status == 'PENDING_ANTOJO':
-                        import shutil
-                        import os
-                        import uuid
-                        new_vid = f"{vid}_{uuid.uuid4().hex[:6]}"
-                        logger.info(f"Duplicando pista para ANTOJO: '{query}' (Original ID: {vid}, Nuevo ID: {new_vid})")
-                        
-                        if current_path and os.path.exists(current_path):
-                            try:
-                                os.makedirs(os.path.dirname(file_path), exist_ok=True)
-                                shutil.copy(current_path, file_path)
-                                
-                                cursor.execute("""
-                                    INSERT INTO tracks (id, title, artist, album, duration_seconds, status, is_permanent, file_path, genre)
-                                    VALUES (?, ?, ?, ?, ?, 'ANTOJO', 0, ?, ?)
-                                """, (new_vid, r_title, r_artist, r_album, r_duration, file_path, rec.genre_context))
-                                valid_count += 1
-                                logger.info(f"Copiado localmente con éxito para antojo.")
-                            except Exception as e:
-                                logger.error(f"Error copiando archivo a Antojos: {e}")
-                        else:
-                            # If file doesn't exist locally, just download it as new
-                            cursor.execute("""
-                                INSERT INTO tracks (id, title, artist, album, duration_seconds, status, is_permanent, file_path, genre)
-                                VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
-                            """, (new_vid, r_title, r_artist, r_album, r_duration, target_status, file_path, rec.genre_context))
-                            valid_count += 1
                     else:
-                        logger.info(f"Descartado '{query}': Ya existe en la BD (estado: {current_status}, ID: {vid})")
+                        logger.info(f"Discarded '{rec.artist} - {rec.title}': Already exists in DB (status: {current_status}, ID: {vid})")
                     continue
                     
+                r_track_num = resolved.get('track_number')
+                r_rel_date = resolved.get('release_date')
                 cursor.execute("""
-                    INSERT INTO tracks (id, title, artist, album, duration_seconds, status, is_permanent, file_path, genre)
-                    VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
-                """, (vid, r_title, r_artist, r_album, r_duration, target_status, file_path, rec.genre_context))
+                    INSERT INTO tracks (id, title, artist, album, duration_seconds, status, is_permanent, file_path, genre, track_number, release_date)
+                    VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
+                """, (vid, r_title, r_artist, r_album, r_duration, target_status, file_path, rec.genre_context, r_track_num, r_rel_date))
                 
-                logger.info(f"Aceptado '{query}' -> YT: '{r_artist.lower()} {r_title.lower()}' (Similitud: {sim}%) [ID: {vid}]")
+                logger.info(f"Accepted '{r_artist} - {r_title}' [Album: {r_album}] [ID: {vid}]")
                 valid_count += 1
                 
         return valid_count
 
-    def run_intent_curation(self, intent_text: str) -> list[AntojoGroup]:
+    def run_intent_curation(self, intent_text: str) -> list[RequestGroup]:
         if not self.client:
-            logger.warning("Gemini no configurado para curación de antojos.")
+            logger.warning("Gemini not configured for request curation.")
             return []
             
         prompt = f"""
-        Actúa como un recomendador musical inteligente. Traduce esta intención del usuario en COMANDOS DE BÚSQUEDA (IntentAction).
-        Ya no debes adivinar ni inventar canciones. Solo debes indicar qué y cómo debemos buscar en YouTube Music.
+        Act as an intelligent music recommender. Translate the user's intent into SEARCH COMMANDS (IntentAction).
+        Do not guess or hallucinate songs. Only specify what and how to search on YouTube Music.
         
-        REGLAS:
-        - action_type: Usa 'artist_hits' si pide canciones de un artista. Usa 'album_tracks' si pide un álbum concreto. Usa 'playlist_vibe' si pide una vibra genérica o un género (ej. 'reggaeton', 'estudiar').
-        - search_query: Sé preciso. Si es un álbum, incluye el nombre del álbum y del artista.
-        - limit: Para álbumes ignoraremos este límite, pero para artist_hits o playlist_vibe pon al menos 20.
+        RULES:
+        - action_type:
+          * Use 'track' if the user asks for one or more exact specific songs (e.g. 'Quevedo - Columbia', 'La Nasa by Anther').
+          * Use 'artist_hits' if asking for tracks by an artist.
+          * Use 'album_tracks' if asking for a specific album.
+          * Use 'playlist_vibe' if asking for a general vibe or genre (e.g. 'reggaeton', 'study').
+        - search_query: Be ultra precise. If a song or album, include official artist and title.
+        - limit: 1 for individual songs ('track'), for albums the total track count, for artist_hits or playlist_vibe use at least 20.
         
-        INTENCIÓN DEL USUARIO:
+        USER INTENT:
         '{intent_text}'
         
-        Devuelve SOLO JSON válido cumpliendo el esquema solicitado (IntentActionList).
+        Return ONLY valid JSON complying with the requested schema (IntentActionList).
         """
         
         self.api_calls_made += 1
@@ -359,29 +339,36 @@ class CuratorLLM:
                 data = json.loads(response.text)
                 actions = [IntentAction(**a) for a in data.get('actions', [])]
                 
-            logger.info(f"LLM generó {len(actions)} intenciones de búsqueda RAG.")
-            
+            logger.info(f"LLM generated {len(actions)} RAG search intents.")
             return self._execute_rag_actions(actions)
-
             
         except Exception as e:
-            logger.error(f"Error procesando el antojo del usuario con LLM/RAG: {e}")
+            logger.error(f"Error processing user request with LLM/RAG: {e}")
             return []
 
-
-
-    def _execute_rag_actions(self, actions) -> list[AntojoGroup]:
+    def _execute_rag_actions(self, actions) -> list[RequestGroup]:
         final_groups = []
         for action in actions:
-            logger.info(f"Ejecutando RAG ({action.action_type}): '{action.search_query}'")
+            logger.info(f"Executing RAG ({action.action_type}): '{action.search_query}'")
             extracted_tracks = []
             
             try:
-                if action.action_type == 'artist_hits':
+                if action.action_type == 'track':
+                    songs = self.yt.search(action.search_query, filter="songs", limit=5)
+                    for s in songs:
+                        title = s.get('title', '')
+                        artists = [a['name'] for a in s.get('artists', []) if 'name' in a]
+                        artist = ", ".join(artists) if artists else 'Unknown'
+                        if title and artist:
+                            extracted_tracks.append((title, artist))
+                            break # Pick most relevant result
+                            
+                elif action.action_type == 'artist_hits':
                     songs = self.yt.search(action.search_query, filter="songs", limit=action.limit)
                     for s in songs:
                         title = s.get('title', '')
-                        artist = s.get('artists', [{'name': ''}])[0].get('name', '') if s.get('artists') else 'Unknown'
+                        artists = [a['name'] for a in s.get('artists', []) if 'name' in a]
+                        artist = ", ".join(artists) if artists else (s.get('artists', [{'name': ''}])[0].get('name', '') if s.get('artists') else 'Unknown')
                         if title and artist:
                             extracted_tracks.append((title, artist))
                             
@@ -397,7 +384,7 @@ class CuratorLLM:
                                 if title and artist:
                                     extracted_tracks.append((title, artist))
                     if not extracted_tracks:
-                        logger.warning("Álbum no encontrado, haciendo búsqueda fallback de canciones...")
+                        logger.warning("Album not found, performing fallback song search...")
                         songs = self.yt.search(action.search_query, filter="songs", limit=15)
                         for s in songs:
                             title = s.get('title', '')
@@ -418,12 +405,12 @@ class CuratorLLM:
                                     if title and artist:
                                         extracted_tracks.append((title, artist))
                             except Exception as e:
-                                logger.error(f"Error extrayendo tracks de playlist {play_id}: {e}")
+                                logger.error(f"Error extracting tracks from playlist {play_id}: {e}")
             except Exception as e:
-                logger.error(f"Error en ytmusicapi durante RAG: {e}")
+                logger.error(f"Error in ytmusicapi during RAG: {e}")
                 
             if extracted_tracks:
-                logger.info(f"RAG extrajo {len(extracted_tracks)} canciones de YouTube Music.")
+                logger.info(f"RAG extracted {len(extracted_tracks)} tracks from YouTube Music.")
                 seen = set()
                 unique_tracks = []
                 for title, artist in extracted_tracks:
@@ -436,45 +423,34 @@ class CuratorLLM:
                                 title=title,
                                 genre_context=action.genre_context,
                                 discovery_type="adjacent",
-                                reason=f"Extraído vía YT Music ({action.action_type})"
+                                reason=f"Extracted via YT Music ({action.action_type})"
                             )
                         )
-                final_groups.append(AntojoGroup(folder_name=action.folder_name, tracks=unique_tracks))
+                final_groups.append(RequestGroup(folder_name=action.folder_name, tracks=unique_tracks))
                 
         return final_groups
-
-    def run_auto_antojo(self, artist_name: str, genre: str = "Variado") -> list[AntojoGroup]:
-        logger.info(f"Generando Auto-Antojo para: {artist_name}")
-        action = IntentAction(
-            action_type="artist_hits",
-            search_query=artist_name,
-            folder_name=f"{artist_name.replace(' ', '_')}_Sorpresa",
-            limit=15,
-            genre_context=genre
-        )
-        return self._execute_rag_actions([action])
 
     def generate_local_radio(self, vibra: str) -> None:
         if not self.client:
             return
             
-        logger.info(f"Generando Radio Local para vibra: '{vibra}'")
+        logger.info(f"Generating Local Radio for vibe: '{vibra}'")
         
-        with sqlite3.connect(self.db_path) as conn:
+        with get_db_connection(self.db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, artist, title, file_path FROM tracks WHERE status IN ('CINTA', 'PERMANENT', 'ANTOJO')")
+            cursor.execute("SELECT id, artist, title, file_path FROM tracks WHERE status IN ('CINTA', 'PERMANENT')")
             all_tracks = cursor.fetchall()
             
         if not all_tracks:
             return
             
         prompt = f"""
-        Actúa como un DJ. El usuario quiere una radio local con esta vibra: '{vibra}'.
-        Aquí tienes las canciones disponibles en su dispositivo.
-        Elige las 40 canciones que MEJOR encajen con esta vibra.
-        Devuelve SOLO un JSON con una lista de IDs.
+        Act as a DJ. The user wants a local radio playlist matching this vibe: '{vibra}'.
+        Here are the tracks available on their device.
+        Pick the 40 tracks that BEST match this vibe.
+        Return ONLY a JSON list of IDs.
         
-        CANCIONES:
+        TRACKS:
         """
         for t_id, t_artist, t_title, _ in all_tracks:
             prompt += f"[{t_id}] {t_artist} - {t_title}\n"
@@ -500,24 +476,24 @@ class CuratorLLM:
                 selected_ids = data.get('ids', [])
                 
             import os
-            os.makedirs("storage/Playlists", exist_ok=True)
-            m3u8_path = f"storage/Playlists/Radio_{self.sanitize_filename(vibra)}.m3u8"
+            os.makedirs(self.paths.playlists_dir, exist_ok=True)
+            m3u8_path = os.path.join(self.paths.playlists_dir, f"Radio_{self.sanitize_filename(vibra)}.m3u8")
             
             with open(m3u8_path, 'w', encoding='utf-8') as f:
                 f.write("#EXTM3U\n")
                 for t_id in selected_ids:
                     f_path = next((t[3] for t in all_tracks if t[0] == t_id), None)
                     if f_path and os.path.exists(f_path):
-                        rel_path = os.path.relpath(f_path, "storage/Playlists")
+                        rel_path = os.path.relpath(f_path, self.paths.playlists_dir)
                         f.write(f"{rel_path}\n")
                         
-            logger.info(f"Radio local generada: {m3u8_path} con {len(selected_ids)} canciones.")
+            logger.info(f"Local radio generated: {m3u8_path} with {len(selected_ids)} tracks.")
             
         except Exception as e:
-            logger.error(f"Error generando radio local: {e}")
+            logger.error(f"Error generating local radio: {e}")
 
     def run_curation_cycle(self, slots: int) -> int:
-        """Bucle principal de curación que itera hasta rellenar los slots o agotar intentos."""
+        """Main curation loop that iterates until slots are filled or max attempts reached."""
         total_validated = 0
         
         batch_size = 50
@@ -526,13 +502,13 @@ class CuratorLLM:
         
         while total_validated < slots and attempts < max_attempts:
             needed = slots - total_validated
-            logger.info(f"Solicitando {needed} recomendaciones al LLM (Intento {attempts+1}/{max_attempts})")
+            logger.info(f"Requesting {needed} recommendations from LLM (Attempt {attempts+1}/{max_attempts})")
             
             candidates = self.generate_recommendations(needed)
             if not candidates:
                 attempts += 1
                 import time
-                time.sleep(15) # Evitar ametrallar a la API si nos da un 429 por límite de peticiones por minuto
+                time.sleep(15) # Avoid hammering API if rate limited
                 continue
                 
             validated = self.validate_and_save(candidates)

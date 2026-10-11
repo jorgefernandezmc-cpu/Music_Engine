@@ -1,19 +1,24 @@
 import argparse
 import sys
-import sqlite3
 import os
 from datetime import datetime
+from src.paths import StoragePaths
+from src.db import get_db_connection
 from src.engine import MusicEngine
 from src.ytm_extractor import YTMExtractor
 from src.telemetry import TelemetryEngine
 from src.playlist_gen import PlaylistGenerator
+from src.downloader import Downloader
 
-def get_status(db_path="data/conveyor_state.sqlite", storage_dir="storage"):
+def get_status(db_path="data/conveyor_state.sqlite", config_path="config/config.yaml"):
+    paths = StoragePaths(config_path)
+    storage_dir = paths.base_dir
+    
     if not os.path.exists(db_path):
-        print("La base de datos no está inicializada.")
+        print("Database is not initialized. Run 'python database/init_db.py' first.")
         return
         
-    with sqlite3.connect(db_path) as conn:
+    with get_db_connection(db_path) as conn:
         cursor = conn.cursor()
         
         counts = {}
@@ -23,14 +28,16 @@ def get_status(db_path="data/conveyor_state.sqlite", storage_dir="storage"):
             
         cursor.execute("SELECT value FROM system_metadata WHERE key = 'last_listenbrainz_sync'")
         row = cursor.fetchone()
-        last_sync = datetime.fromtimestamp(int(row[0])).isoformat() if row and row[0] else "Nunca"
+        last_sync = datetime.fromtimestamp(int(row[0])).isoformat() if row and row[0] else "Never"
         
         cursor.execute("SELECT MAX(listened_at) FROM listen_events")
         row = cursor.fetchone()
-        last_scrobble = row[0] if row else "Ninguno"
+        last_scrobble = row[0] if row else "None"
         
-    def get_size(start_path = '.'):
+    def get_size(start_path):
         total_size = 0
+        if not os.path.exists(start_path):
+            return 0
         for dirpath, _, filenames in os.walk(start_path):
             for f in filenames:
                 fp = os.path.join(dirpath, f)
@@ -38,41 +45,70 @@ def get_status(db_path="data/conveyor_state.sqlite", storage_dir="storage"):
                     total_size += os.path.getsize(fp)
         return total_size
         
-    size_bytes = get_size(storage_dir) if os.path.exists(storage_dir) else 0
+    size_bytes = get_size(storage_dir)
     size_mb = size_bytes / (1024 * 1024)
     size_gb = size_bytes / (1024 * 1024 * 1024)
     size_str = f"{size_gb:.2f} GB" if size_gb > 1 else f"{size_mb:.2f} MB"
     
-    print("\n" + "="*40)
-    print(" ESTADO DE LA CINTA TRANSPORTADORA")
-    print("="*40)
-    print(f"Pistas en CINTA:     {counts['CINTA']}")
-    print(f"Pistas PERMANENTES:  {counts['PERMANENT']}")
-    print(f"Pistas PENDIENTES:   {counts['PENDING']}")
-    print(f"Pistas PURGADAS:     {counts['PURGED']}")
-    print("-" * 40)
-    print(f"Espacio en storage:  {size_str}")
-    print(f"Último scrobble:     {last_scrobble}")
-    print(f"Última sync LB:      {last_sync}")
-    print("="*40 + "\n")
+    print("\n" + "="*45)
+    print(" CONVEYOR BELT STATUS")
+    print("="*45)
+    print(f"Base directory:     {storage_dir}")
+    print(f"Tracks in CONVEYOR: {counts['CINTA']}")
+    print(f"PERMANENT tracks:   {counts['PERMANENT']}")
+    print(f"PENDING tracks:     {counts['PENDING']}")
+    print(f"PURGED tracks:      {counts['PURGED']}")
+    print("-" * 45)
+    print(f"Disk space used:    {size_str}")
+    print(f"Last scrobble:      {last_scrobble}")
+    print(f"Last LB sync:       {last_sync}")
+    print("="*45 + "\n")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="La Cinta Transportadora - Motor Musical Autónomo")
-    subparsers = parser.add_subparsers(dest="command", help="Comandos disponibles")
+    parser = argparse.ArgumentParser(description="The Conveyor Belt - Autonomous Music Engine")
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
     
-    run_parser = subparsers.add_parser("run", help="Ejecuta el ciclo completo del motor")
-    run_parser.add_argument("--fill", action="store_true", help="Fuerza la ejecución continua hasta llenar la Cinta")
+    run_parser = subparsers.add_parser("run", help="Executes full engine cycle")
+    run_parser.add_argument("--fill", action="store_true", help="Forces continuous run until Conveyor buffer is full")
     
-    import_p = subparsers.add_parser("import-playlist", help="Importa una playlist como permanente")
-    import_p.add_argument("url_or_id", help="URL o ID de la playlist de YouTube Music")
+    import_p = subparsers.add_parser("import-playlist", help="Imports a YouTube Music playlist as permanent")
+    import_p.add_argument("url_or_id", help="URL or ID of YouTube Music playlist")
+    import_p.add_argument("--download", action="store_true", help="Download tracks immediately after indexing")
+    import_p.add_argument("--no-album-search", action="store_true", help="Do not search for studio album versions (use as listed)")
+
+    dl_parser = subparsers.add_parser("download-pending", help="Downloads all tracks in PENDING queue without invoking AI curator")
     
-    subparsers.add_parser("sync-telemetry", help="Sincroniza scrobbles sin descargar nada")
-    subparsers.add_parser("status", help="Muestra el estado de la base de datos y ocupación")
-    subparsers.add_parser("update-playlists", help="Regenera todas las listas .m3u8")
+    fix_parser = subparsers.add_parser("fix-metadata", help="Audits and auto-repairs questionable or mismatched tracks (covers, 8-bit, karaoke, etc.)")
+    fix_parser.add_argument("--use-ai", action="store_true", help="Uses AI (Gemini) as last resort if heuristics find no reliable match")
+
+    subparsers.add_parser("sync-telemetry", help="Synchronizes scrobbles without downloading audio")
+    subparsers.add_parser("status", help="Displays database status and disk usage")
+    subparsers.add_parser("update-playlists", help="Regenerates all .m3u8 playlists and Lune backup")
+    watch_p = subparsers.add_parser("watch-folders", help="Monitors folder changes in Permanent and Conveyor, updating playlists in real time")
+    watch_p.add_argument("--interval", type=int, default=5, help="Interval in seconds between checks (default: 5)")
+    
+    set_alb_p = subparsers.add_parser("set-album", help="Reassigns a permanent track to a specific album and moves physical files")
+    set_alb_p.add_argument("song_query", help="Track name or artist")
+    set_alb_p.add_argument("new_album", help="Target official album name")
+
+    enrich_p = subparsers.add_parser("enrich-lyrics", help="Scans and upgrades lyrics for existing tracks")
+    enrich_p.add_argument("--limit", type=int, default=50, help="Maximum tracks to process (default: 50, 0=all)")
+    enrich_p.add_argument("--all", action="store_true", help="Process entire library without limit")
+    enrich_p.add_argument("--no-upgrade", action="store_true", help="Do not attempt to upgrade plain lyrics to synced")
+
+    enrich_g = subparsers.add_parser("enrich-genres", help="Classifies and assigns exact music genres in metadata and SQLite")
+    enrich_g.add_argument("--limit", type=int, default=50, help="Maximum tracks to process (default: 50, 0=all)")
+    enrich_g.add_argument("--all", action="store_true", help="Process all tracks pending genre without limit")
+    enrich_g.add_argument("--force-all", action="store_true", help="Reclassify even tracks with already assigned genres")
+    enrich_g.add_argument("--no-ai", action="store_true", help="Disable Gemini completely and rely exclusively on open sources (MusicBrainz/Deezer)")
+
+    enrich_m = subparsers.add_parser("enrich-metadata", help="Enriches track number and release date across library and tags")
+    enrich_m.add_argument("--limit", type=int, default=0, help="Maximum tracks to process (0=all)")
+    enrich_m.add_argument("--force-all", action="store_true", help="Reprocess even tracks with existing track numbers and dates")
     
     args = parser.parse_args()
-    
+
     db_path = "data/conveyor_state.sqlite"
     config_path = "config/config.yaml"
     
@@ -89,10 +125,10 @@ def main():
             missing.append("LISTENBRAINZ_TOKEN")
             
         if missing:
-            print("ERROR: Faltan variables críticas en config/.env o contienen valores por defecto:")
+            print("ERROR: Critical environment variables missing in config/.env or containing default values:")
             for m in missing:
                 print(f" - {m}")
-            print("\nPor favor, edita config/.env y configúralas antes de continuar.")
+            print("\nPlease edit config/.env and configure them before continuing.")
             sys.exit(1)
             
         engine = MusicEngine(db_path, config_path)
@@ -103,24 +139,173 @@ def main():
         if "list=" in url_or_id:
             playlist_id = url_or_id.split("list=")[1].split("&")[0]
             
-        print(f"Importando playlist: {playlist_id}")
-        extractor = YTMExtractor(db_path, "storage/Permanente", "config/headers_auth.json")
-        title, tracks = extractor.extract_playlist(playlist_id)
+        print(f"Importing playlist: {playlist_id}")
+        extractor = YTMExtractor(db_path, config_path, "config/headers_auth.json")
+        resolve_albums = not args.no_album_search
+        title, tracks = extractor.extract_playlist(playlist_id, resolve_albums=resolve_albums)
         extractor.generate_taste_profile()
-        print(f"Playlist '{title}' indexada. ({len(tracks)} pistas pendientes de descarga).")
-        print("Ejecuta 'python main.py run' para descargar físicamente las pistas.")
+        print(f"\nPlaylist '{title}' indexed successfully. ({len(tracks)} tracks assigned to Permanent).")
+        
+        if args.download:
+            print("\nStarting physical download of imported tracks...")
+            dl = Downloader(db_path, config_path)
+            total_dl = 0
+            while True:
+                downloaded = dl.download_pending_tracks()
+                if downloaded == 0:
+                    break
+                total_dl += downloaded
+                print(f"Downloaded {total_dl}/{len(tracks)} tracks...")
+            print("Downloads completed!")
+            pg = PlaylistGenerator(db_path, config_path)
+            pg.update_all_playlists()
+            print("M3U8 playlists updated.")
+        else:
+            print("Run 'python main.py download-pending' or 'python main.py run' to download them physically.")
+    elif args.command == "download-pending":
+        print("Starting download of pending tracks...")
+        with get_db_connection(db_path) as conn:
+            conn.execute("UPDATE tracks SET status = 'PENDING' WHERE status = 'FAILED'")
+            conn.commit()
+            
+        dl = Downloader(db_path, config_path)
+        total_dl = 0
+        while True:
+            downloaded = dl.download_pending_tracks(retry_failed=False)
+            if downloaded == 0:
+                break
+            total_dl += downloaded
+            print(f"Batch completed (+{downloaded} tracks). Total downloaded: {total_dl}")
+        print("Download queue finished.")
+        pg = PlaylistGenerator(db_path, config_path)
+        pg.update_all_playlists()
+        print("M3U8 playlists updated.")
+    elif args.command == "fix-metadata":
+        from ytmusicapi import YTMusic
+        from src.album_resolver import auto_fix_track, FORBIDDEN_WORDS, is_suspicious_match
+        
+        print("Starting audit and auto-repair of questionable tracks...")
+        yt = YTMusic()
+        client = None
+        if args.use_ai:
+            from dotenv import load_dotenv
+            load_dotenv("config/.env")
+            from google import genai
+            api_key = os.getenv("GEMINI_API_KEY")
+            if api_key and "your_" not in api_key:
+                client = genai.Client(api_key=api_key)
+                print("[*] Gemini activated as last resort for questionable matches.")
+                
+        with get_db_connection(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, title, artist, album, file_path FROM tracks")
+            all_tracks = cursor.fetchall()
+            
+            fixed_count = 0
+            checked_count = 0
+            
+            known_suspect_vids = set()
+            auditoria_file = "../Herramientas/Sincronizador_YT/registros/auditoria_sospechosas.txt"
+            if os.path.exists(auditoria_file):
+                import re
+                with open(auditoria_file, 'r', encoding='utf-8') as af:
+                    known_suspect_vids = set(re.findall(r'watch\?v=([a-zA-Z0-9_-]+)', af.read()))
+            
+            for t_id, t_title, t_artist, t_album, f_path in all_tracks:
+                needs_check = (
+                    t_id in known_suspect_vids or
+                    any(fw in t_title.lower() or fw in (t_album or '').lower() or fw in t_artist.lower() for fw in FORBIDDEN_WORDS)
+                )
+                
+                if not needs_check:
+                    continue
+                    
+                checked_count += 1
+                print(f"[*] Analyzing questionable case: {t_artist} - {t_title} (Current ID: {t_id})...")
+                fixed = auto_fix_track(yt, t_artist, t_title, current_vid=t_id, client=client)
+                
+                if fixed.get('fixed') and fixed.get('id') != t_id:
+                    new_vid = fixed['id']
+                    cursor.execute("SELECT id FROM tracks WHERE id = ?", (new_vid,))
+                    existing = cursor.fetchone()
+                    if existing:
+                        cursor.execute("DELETE FROM tracks WHERE id = ?", (t_id,))
+                    else:
+                        cursor.execute("""
+                            UPDATE tracks 
+                            SET id = ?, album = ? 
+                            WHERE id = ?
+                        """, (new_vid, fixed.get('album', t_album), t_id))
+                    fixed_count += 1
+                    print(f"  [✓] Fixed via {fixed.get('method')}: New ID -> {new_vid}")
+                else:
+                    print(f"  [-] Retained current ID (or no change required): {t_id}")
+                    
+            conn.commit()
+            print(f"\nAudit completed. {checked_count} analyzed, {fixed_count} tracks fixed successfully.")
     elif args.command == "sync-telemetry":
         tel = TelemetryEngine(db_path, config_path)
-        processed = tel.process_listens()
-        print(f"Telemetría sincronizada. {processed} nuevos scrobbles procesados.")
+        processed, _ = tel.process_listens()
+        print(f"Telemetry synchronized. {processed} new scrobbles processed.")
     elif args.command == "status":
-        get_status(db_path, "storage")
+        get_status(db_path, config_path)
     elif args.command == "update-playlists":
-        pg = PlaylistGenerator(db_path, "storage")
+        pg = PlaylistGenerator(db_path, config_path)
         pg.update_all_playlists()
-        print("Listas actualizadas.")
+        print("Playlists updated successfully.")
+    elif args.command == "watch-folders":
+        import time
+        pg = PlaylistGenerator(db_path, config_path)
+        print(f"Monitoring Permanent and Conveyor folders (every {args.interval}s)... Press Ctrl+C to stop.")
+        pg.check_and_update_if_modified()
+        try:
+            while True:
+                time.sleep(args.interval)
+                pg.check_and_update_if_modified()
+        except KeyboardInterrupt:
+            print("\nMonitoring stopped.")
+    elif args.command == "set-album":
+        from src.order_processor import OrderProcessor
+        pg = PlaylistGenerator(db_path, config_path)
+        processor = OrderProcessor(db_path, config_path, playlists=pg)
+        with get_db_connection(db_path) as conn:
+            ok, msg = processor.process_album_move(conn, args.song_query, args.new_album)
+            if ok:
+                print(f"[✓] Success: {msg}")
+            else:
+                print(f"[-] {msg}")
+    elif args.command == "enrich-lyrics":
+        from src.enrich_lyrics import run_daily_lyrics_enrichment
+        limit = 0 if args.all else args.limit
+        print(f"Starting lyrics scan and update (Limit: {'No limit' if limit == 0 else limit} tracks)...")
+        stats = run_daily_lyrics_enrichment(db_path, limit=limit, upgrade_unsynced=not args.no_upgrade)
+        print("\nResults:")
+        print(f" - Processed:           {stats['processed']}")
+        print(f" - New lyrics assigned: {stats['new_lyrics']}")
+        print(f" - Upgraded to synced:  {stats['upgraded_to_synced']}")
+        print(f" - Unchanged:           {stats['unchanged']}")
+    elif args.command == "enrich-genres":
+        from src.genre_resolver import enrich_library_genres
+        limit = 0 if args.all else args.limit
+        print(f"Starting genre enrichment (Limit: {'No limit' if limit == 0 else limit} tracks, AI: {'Disabled' if args.no_ai else 'Last resort only'})...")
+        stats = enrich_library_genres(db_path, limit=limit, force_all=args.force_all, allow_ai=not args.no_ai)
+        print("\nResults:")
+        print(f" - Processed: {stats['processed']}")
+        print(f" - Updated:   {stats['updated']}")
+    elif args.command == "enrich-metadata":
+        from src.enrich_track_meta import enrich_library_metadata
+        limit = args.limit
+        print(f"Starting track and release date enrichment (Limit: {'No limit' if limit == 0 else limit} tracks)...")
+        stats = enrich_library_metadata(db_path, force_all=args.force_all, limit=limit)
+        print("\nResults:")
+        print(f" - Songs evaluated:    {stats['total_songs']}")
+        print(f" - Albums processed:   {stats['albums_processed']}")
+        print(f" - Tracks assigned:    {stats['tracks_assigned']}")
+        print(f" - Dates assigned:     {stats['dates_assigned']}")
+        print(f" - Tagged files:       {stats['files_tagged']}")
     else:
         parser.print_help()
+
 
 if __name__ == "__main__":
     main()

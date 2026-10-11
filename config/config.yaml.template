@@ -1,21 +1,141 @@
+# ==============================================================================
+#                 MUSIC ENGINE - CONFIGURATION TEMPLATE
+# ==============================================================================
+# Copy this file to config/config.yaml and adjust paths to match your system.
+# For API keys (Gemini, ListenBrainz), edit config/.env
+
+# ------------------------------------------------------------------------------
+# 1. STORAGE AND PHYSICAL PATHS
+# ------------------------------------------------------------------------------
+storage:
+  # Absolute base path where your synced music collection resides:
+  base_dir: "/home/your_user/Music/Songs"
+  
+  # Subfolders relative to base_dir:
+  cinta_dir: "Cinta"              # Discovery buffer and temporary rotation
+  permanente_dir: "Permanente"    # Permanent collection organized by Artist/Album
+  playlists_dir: "Playlists"      # Destination where .m3u8 playlists are generated
+  
+  # Interactive mailbox file for remote commands and requests:
+  peticiones_file: "peticiones.txt"
+  
+  # Safety mechanism against unintended mass deletions:
+  mass_deletion_failsafe_limit: 50
+  
+  # Maximum number of SQLite backups to retain in data/backups/:
+  max_db_backups: 5
+
+# ------------------------------------------------------------------------------
+# 2. CONVEYOR BELT (LIFECYCLE, ROTATION, AND PROMOTION)
+# ------------------------------------------------------------------------------
 conveyor:
+  # Target maximum capacity of rotating songs on the Conveyor:
   buffer_size: 750
-  grace_period_days: 30
+  
+  # Grace period (in days) without listens before rotating the track out:
+  grace_period_days: 150
+  
+  # Full plays required to promote to Permanent:
   promotion_play_count: 15
+  
+  # Maximum skips before being purged from the Conveyor:
+  max_skips_before_purge: 5
+  
+  # Skip tolerance ratio relative to completed plays:
   max_skip_ratio: 0.7
+  
+  # Telemetry safety margin (days) before suspending purges:
   telemetry_safety_margin_days: 7
+  
+  # Number of tracks to request from the Curator in each normal cycle:
+  curation_batch_per_cycle: 20
 
+# ------------------------------------------------------------------------------
+# 3. INTELLIGENT CURATOR (LLM / GEMINI)
+# ------------------------------------------------------------------------------
 llm:
-  model: gemini-3.6-flash
+  # AI Model (e.g. gemini-2.5-flash, gemini-1.5-flash, gemini-3.5-flash):
+  model: gemini-2.5-flash
+  
+  # Musical diversity weights for balancing recommendations:
   diversity_weights:
-    exploitation: 0.60
-    adjacent: 0.25
-    exploration: 0.15
+    exploitation: 0.60    # Direct affinity with your most played artists
+    adjacent: 0.25        # Related artists or styles
+    exploration: 0.15     # Discovery of new genres
 
+# ------------------------------------------------------------------------------
+# 4. AUDIO DOWNLOADER (YT-DLP)
+# ------------------------------------------------------------------------------
 downloader:
+  # Format requested from yt-dlp:
   audio_format: "bestaudio/best"
+  
+  # Preferred extraction codec:
   preferred_codec: "opus"
+  
+  # Fallback codec:
   fallback_codec: "m4a"
+  
+  # Random delay interval between tracks (seconds):
   sleep_interval_min: 3
   sleep_interval_max: 8
+  
+  # Download batch size:
   batch_size: 50
+  
+  # Maximum downloads per periodic cycle:
+  cycle_max_downloads: 50
+  
+  # Automatically retry downloads with errors:
+  retry_failed: true
+
+# ------------------------------------------------------------------------------
+# 5. TELEMETRY (LISTENBRAINZ)
+# ------------------------------------------------------------------------------
+telemetry:
+  listenbrainz_url: "https://api.listenbrainz.org/1"
+  fuzzy_threshold: 80
+  loved_fuzzy_artist_threshold: 80
+  loved_fuzzy_title_threshold: 85
+  lookback_days: 30
+
+# ------------------------------------------------------------------------------
+# 6. RELEASE RADAR (TOP ARTISTS)
+# ------------------------------------------------------------------------------
+radar:
+  enabled: true
+  check_interval_hours: 24
+  top_artists_limit: 10
+
+# ------------------------------------------------------------------------------
+# 7. LYRICS ENRICHMENT (.LRC / MUTAGEN)
+# ------------------------------------------------------------------------------
+lyrics:
+  daily_scan_enabled: true
+  scan_interval_hours: 24
+  daily_batch_limit: 50
+  upgrade_unsynced: true
+
+# ------------------------------------------------------------------------------
+# 8. MUSIC GENRE ENRICHMENT
+# ------------------------------------------------------------------------------
+genres:
+  daily_scan_enabled: true
+  daily_batch_limit: 35
+  allow_ai: true
+
+# ------------------------------------------------------------------------------
+# 9. PLAYLIST GENERATOR (.M3U8)
+# ------------------------------------------------------------------------------
+playlists:
+  auto_update_on_change: true
+  generate_lune_backup: true
+  lune_include_artists: false
+  min_artist_tracks: 10
+
+# ------------------------------------------------------------------------------
+# 10. DESKTOP NOTIFICATIONS (LINUX)
+# ------------------------------------------------------------------------------
+notifications:
+  enabled: true
+  urgency: "normal"

@@ -1,0 +1,73 @@
+# ==============================================================================
+#                             GITIGNORE - MUSIC ENGINE
+# ==============================================================================
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# Environment Variables & Secrets (NEVER COMMIT)
+.env
+config/.env
+*.env
+*.pem
+*.key
+
+# Local User Configuration & Credentials
+config/config.yaml
+config/cookies.txt
+config/headers_auth.json
+
+# Keep template configurations in repository
+!config/.env.template
+!config/config.yaml.template
+
+# SQLite Database, Locks, Backups & Runtime State
+data/*.sqlite
+data/*.sqlite-shm
+data/*.sqlite-wal
+data/*.db
+data/*.lock
+data/backups/
+data/download_archive.txt
+data/playlist_folder_state.json
+data/taste_profile.json
+
+# Keep data directory and templates tracked
+!data/.gitkeep
+!data/*.template
+
+# Logs
+logs/*.log
+*.log
+!logs/.gitkeep
+
+# IDEs, Editors & OS Files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Syncthing conflict & temporary files
+*.sync-conflict-*
+.stversions/
+.stfolder/

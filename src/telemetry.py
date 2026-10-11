@@ -4,11 +4,12 @@ import sqlite3
 import time
 import re
 import unicodedata
-from datetime import datetime, timezone
 import requests
+from datetime import datetime, timezone
 from thefuzz import fuzz
 import yaml
 from dotenv import load_dotenv
+from src.db import get_db_connection
 
 # Ensure logs dir exists
 os.makedirs('logs', exist_ok=True)
@@ -34,7 +35,7 @@ class TelemetryEngine:
         self.fuzzy_threshold = 85
         
     def normalize_track_string(self, text: str) -> str:
-        """Normaliza cadenas eliminando acentos, coletillas y puntuación."""
+        """Normalizes track strings removing accents, boilerplate tags, and punctuation."""
         if not text:
             return ""
         # Lowercase
@@ -66,7 +67,7 @@ class TelemetryEngine:
         return text
 
     def get_last_sync_ts(self) -> int:
-        with sqlite3.connect(self.db_path) as conn:
+        with get_db_connection(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT value FROM system_metadata WHERE key = 'last_listenbrainz_sync'")
             row = cursor.fetchone()
@@ -75,14 +76,14 @@ class TelemetryEngine:
         return 0
 
     def set_last_sync_ts(self, ts: int):
-        with sqlite3.connect(self.db_path) as conn:
+        with get_db_connection(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute("INSERT OR REPLACE INTO system_metadata (key, value) VALUES ('last_listenbrainz_sync', ?)", (str(ts),))
             conn.commit()
 
     def fetch_listens(self, min_ts: int) -> list:
         if not self.lb_user:
-            logger.error("LISTENBRAINZ_USER no está configurado.")
+            logger.error("LISTENBRAINZ_USER is not configured.")
             return []
             
         headers = {}
@@ -114,13 +115,13 @@ class TelemetryEngine:
                         page_listens = payload.get('listens', [])
                         break
                     elif response.status_code == 429:
-                        logger.warning("Límite de peticiones alcanzado. Reintentando...")
+                        logger.warning("Request rate-limit reached. Retrying...")
                         time.sleep(retry_delay * (2 ** attempt))
                     else:
-                        logger.error(f"Error HTTP {response.status_code}: {response.text}")
+                        logger.error(f"HTTP Error {response.status_code}: {response.text}")
                         break
                 except requests.RequestException as e:
-                    logger.error(f"Error de red: {e}")
+                    logger.error(f"Network error: {e}")
                     time.sleep(retry_delay * (2 ** attempt))
                     
             if not page_listens:
@@ -136,7 +137,7 @@ class TelemetryEngine:
                 break
                 
             max_ts_param = valid_listens[-1].get('listened_at') - 1
-            time.sleep(0.5) # Respetar rate-limit de la API (1 req/0.5s aprox)
+            time.sleep(0.5) # Respect ListenBrainz rate limit
             
         return all_listens
 
@@ -147,7 +148,6 @@ class TelemetryEngine:
         if self.lb_token:
             headers['Authorization'] = f"Token {self.lb_token}"
         try:
-            import requests
             r = requests.get(url, headers=headers, params=params)
             if r.status_code == 200:
                 data = r.json()
@@ -168,7 +168,7 @@ class TelemetryEngine:
                 msid_map = {}
                 
                 max_ts = None
-                for _ in range(10): # fetch up to 500 recent listens
+                for _ in range(10): # Fetch up to 500 recent listens
                     p = {"count": 100}
                     if max_ts: p["max_ts"] = max_ts
                     r_ls = requests.get(url_ls, params=p)
@@ -193,15 +193,14 @@ class TelemetryEngine:
                         
                 return loved
         except Exception as e:
-            import logging
-            logging.getLogger('engine').error(f"Error fetching loved tracks: {e}")
+            logger.error(f"Error fetching loved tracks: {e}")
         return []
 
-
-
     def process_listens(self) -> tuple[int, list]:
-        """Descarga scrobbles nuevos, empareja con base de datos y actualiza play_counts.
-        Devuelve (cantidad_procesada, lista_huerfanos)."""
+        """
+        Downloads new scrobbles, matches against database, and updates play_counts.
+        Returns (processed_count, orphan_list).
+        """
         min_ts = self.get_last_sync_ts()
         listens = self.fetch_listens(min_ts)
         
@@ -212,21 +211,22 @@ class TelemetryEngine:
         orphan_scrobbles = []
         latest_ts = min_ts
         
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute("PRAGMA foreign_keys = ON;")
+        with get_db_connection(self.db_path) as conn:
             cursor = conn.cursor()
             
             # Pre-load DB tracks for matching
             cursor.execute("SELECT id, artist, title FROM tracks")
             db_tracks = cursor.fetchall()
             
-            # Map normalized exact strings
+            # Map normalized exact strings and pre-computed word sets
             exact_map = {}
+            words_map = {}
             for t_id, t_artist, t_title in db_tracks:
                 norm_str = self.normalize_track_string(f"{t_artist} {t_title}")
                 exact_map[norm_str] = t_id
+                words_map[norm_str] = set(norm_str.split())
                 
-            # Evitar añadir duplicados en la misma tanda de huérfanos
+            # Avoid adding duplicates in the same batch of orphans
             seen_orphans = set()
             
             cursor.execute("""
@@ -254,31 +254,39 @@ class TelemetryEngine:
                 norm_listen = self.normalize_track_string(f"{l_artist} {l_title}")
                 matched_id = None
                 
-                # Fase 1: Emparejamiento Exacto
+                # Phase 1: Exact Matching (O(1))
                 if norm_listen in exact_map:
                     matched_id = exact_map[norm_listen]
                 else:
-                    # Fase 2: Fuzzy Fallback
+                    # Phase 2: Optimized Fuzzy Fallback with pre-filtering by keywords
                     best_score = 0
                     best_id = None
+                    listen_words = set(norm_listen.split())
+                    
                     for db_norm, t_id in exact_map.items():
+                        # Fast discard if no common words are shared
+                        if not (listen_words & words_map[db_norm]):
+                            continue
+                            
                         score = fuzz.token_set_ratio(norm_listen, db_norm)
                         if score > best_score:
                             best_score = score
                             best_id = t_id
+                            if best_score >= 95: # Near perfect match, early stop
+                                break
                             
                     if best_score >= self.fuzzy_threshold:
                         matched_id = best_id
                     else:
                         if norm_listen not in seen_orphans and len(orphan_scrobbles) < 20:
-                            logger.info(f"Scrobble Huérfano detectado: '{l_artist} - {l_title}'")
+                            logger.info(f"Orphan Scrobble detected: '{l_artist} - {l_title}'")
                             orphan_scrobbles.append({'artist': l_artist, 'title': l_title})
                             seen_orphans.add(norm_listen)
                             cursor.execute("INSERT OR IGNORE INTO orphan_scrobbles (artist, title) VALUES (?, ?)", (l_artist, l_title))
                         
                 if matched_id:
                     dt = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
-                    # Inserción Transaccional
+                    # Transactional insertion
                     cursor.execute("""
                         UPDATE tracks 
                         SET play_count = play_count + 1, last_played_at = ?, skip_count = 0
@@ -291,7 +299,7 @@ class TelemetryEngine:
                     """, (matched_id, dt))
                     processed_count += 1
             
-            # Actualizar timestamp para próxima ejecución
+            # Update timestamp for next execution
             if latest_ts > min_ts:
                 cursor.execute("INSERT OR REPLACE INTO system_metadata (key, value) VALUES ('last_listenbrainz_sync', ?)", (str(latest_ts),))
                 
@@ -300,14 +308,14 @@ class TelemetryEngine:
         return processed_count, orphan_scrobbles
         
     def is_telemetry_fresh(self) -> bool:
-        """Evalúa si los datos de telemetría están recientes para evitar purgas prematuras."""
+        """Evaluates whether telemetry data is fresh to avoid premature purging."""
         safety_days = self.config.get('conveyor', {}).get('telemetry_safety_margin_days', 7)
-        with sqlite3.connect(self.db_path) as conn:
+        with get_db_connection(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT MAX(listened_at) FROM listen_events")
             row = cursor.fetchone()
             if not row or not row[0]:
-                return True # Asumir fresco si no hay eventos (nueva instalación)
+                return True # Assume fresh if no events exist yet (fresh install)
                 
             last_date_str = row[0]
             try:
@@ -318,9 +326,9 @@ class TelemetryEngine:
                 delta = now - last_date
                 
                 if delta.days > safety_days:
-                    logger.warning(f"Telemetría desactualizada. El último listen fue hace {delta.days} días (Margen: {safety_days}). Purgas pausadas.")
+                    logger.warning(f"Outdated telemetry. Last listen was {delta.days} days ago (Margin: {safety_days}). Purging paused.")
                     return False
                 return True
             except Exception as e:
-                logger.error(f"Error parseando fecha {last_date_str}: {e}")
+                logger.error(f"Error parsing date {last_date_str}: {e}")
                 return True
