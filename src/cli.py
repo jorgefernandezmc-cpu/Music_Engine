@@ -107,7 +107,21 @@ def main():
     enrich_m = subparsers.add_parser("enrich-metadata", help="Enriches track number and release date across library and tags")
     enrich_m.add_argument("--limit", type=int, default=0, help="Maximum tracks to process (0=all)")
     enrich_m.add_argument("--force-all", action="store_true", help="Reprocess even tracks with existing track numbers and dates")
-    
+
+    # Intelligent backup & restoration subcommands
+    backup_p = subparsers.add_parser("backup", help="Creates or manages intelligent state backups and snapshots")
+    backup_p.add_argument("--tag", default="manual", help="Optional label or tag for the snapshot (default: manual)")
+    backup_p.add_argument("--force", action="store_true", help="Force snapshot even if state has not changed (bypasses hash deduplication)")
+    backup_p.add_argument("--list", action="store_true", help="List all existing snapshots and their sizes/dates")
+
+    export_p = subparsers.add_parser("export-backup", help="Exports a complete portable migration bundle (.tar.gz) for moving to another PC")
+    export_p.add_argument("--output", "-o", default=None, help="Target destination path for the exported .tar.gz bundle")
+
+    restore_p = subparsers.add_parser("restore-backup", help="Restores a snapshot (.sqlite/.sqlite.gz) or migration bundle (.tar.gz)")
+    restore_p.add_argument("source", help="Path to the backup file (.sqlite, .sqlite.gz or .tar.gz)")
+    restore_p.add_argument("--target-base-dir", default=None, help="New base music directory if paths need to be rebased for this computer")
+    restore_p.add_argument("--no-rebase", action="store_true", help="Do not rebase file paths inside tracks database")
+
     args = parser.parse_args()
 
     db_path = "data/conveyor_state.sqlite"
@@ -300,6 +314,55 @@ def main():
         print(f" - Tracks assigned:    {stats['tracks_assigned']}")
         print(f" - Dates assigned:     {stats['dates_assigned']}")
         print(f" - Tagged files:       {stats['files_tagged']}")
+    elif args.command == "backup":
+        from src.backup_manager import BackupManager
+        bm = BackupManager(db_path, config_path)
+        if args.list:
+            backups = bm.list_backups()
+            print(f"\n=======================================================")
+            print(f" AVAILABLE SNAPSHOTS ({len(backups)} in {bm.backup_dir})")
+            print(f"=======================================================")
+            if not backups:
+                print(" No snapshots found.")
+            else:
+                for b in backups:
+                    size_kb = b["size_bytes"] / 1024
+                    tag_display = f" [{b['tag']}]" if b.get('tag') else ""
+                    format_display = f" | Format: {b.get('format', 'unknown')}"
+                    print(f" • {b['filename']}{tag_display}")
+                    print(f"    Date: {b['date']} | Size: {size_kb:.1f} KB{format_display}")
+            print("=======================================================\n")
+        else:
+            created = bm.create_snapshot(tag=args.tag, force=args.force)
+            if created:
+                print(f"[✓] Backup snapshot successfully saved: {created}")
+            else:
+                print("[i] State unchanged since last snapshot. Deduplication skipped redundant backup (use --force to override).")
+    elif args.command == "export-backup":
+        from src.backup_manager import BackupManager
+        bm = BackupManager(db_path, config_path)
+        exported = bm.export_full_bundle(output_path=args.output)
+        print(f"[✓] Migration bundle exported successfully: {exported}")
+        print("    You can copy this file to another machine and run:")
+        print(f"    python main.py restore-backup {os.path.basename(exported)}")
+    elif args.command == "restore-backup":
+        from src.backup_manager import BackupManager
+        bm = BackupManager(db_path, config_path)
+        print(f"Restoring backup from: {args.source}...")
+        res = bm.restore_backup(
+            backup_source=args.source,
+            target_base_dir=args.target_base_dir,
+            rebase_paths=not args.no_rebase
+        )
+        print("\n=======================================================")
+        print(" RESTORE SUMMARY")
+        print("=======================================================")
+        print(f" - Total tracks in database: {res['total_tracks']}")
+        print(f" - Rebased path references:  {res['rebased_count']}")
+        print(f" - Components restored:      {', '.join(res['restored_components'])}")
+        if res.get('old_base') and res.get('new_base') and res['old_base'] != res['new_base']:
+            print(f" - Base directory rebased:   '{res['old_base']}' -> '{res['new_base']}'")
+        print("=======================================================\n")
     else:
         parser.print_help()
 

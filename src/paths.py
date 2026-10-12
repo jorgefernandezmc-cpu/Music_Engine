@@ -142,9 +142,15 @@ class StoragePaths:
         """Returns the absolute path to the folder containing user-created Lune playlists."""
         return os.path.join(self.playlists_dir, self.user_playlists_dir_name)
 
+    @property
+    def backup_dir(self) -> str:
+        """Returns the configured absolute backup directory."""
+        configured = self.config.get('backup', {}).get('dir', self.config.get('storage', {}).get('backup_dir', 'data/backups'))
+        return os.path.abspath(os.path.expanduser(configured))
+
     def ensure_dirs(self):
         """Ensures main directories exist and initializes default requests mailbox if missing."""
-        for d in [self.base_dir, self.cinta_dir, self.permanente_dir, self.cravings_dir, self.playlists_dir, self.user_playlists_dir]:
+        for d in [self.base_dir, self.cinta_dir, self.permanente_dir, self.cravings_dir, self.playlists_dir, self.user_playlists_dir, self.backup_dir]:
             os.makedirs(d, exist_ok=True)
         if not os.path.exists(self.requests_file) or os.path.getsize(self.requests_file) == 0:
             try:

@@ -162,3 +162,27 @@ notifications:
 cravings:
   # Days before temporary cravings are automatically purged:
   retention_days: 30
+
+# ------------------------------------------------------------------------------
+# 12. SMART BACKUPS & SNAPSHOTS
+# ------------------------------------------------------------------------------
+backup:
+  # Enable automatic snapshots on every engine run cycle:
+  auto_backup: true
+
+  # Destination directory where snapshots are stored (~ expands to home):
+  dir: "data/backups"
+  
+  # Maximum snapshots to keep before automatic rotation:
+  max_backups: 10
+  
+  # Snapshot format:
+  # - "bundle" (recommended): Single unified .tar.gz archive containing database, state files & manifest.
+  # - "db_only": Single .sqlite.gz containing only the database.
+  format: "bundle"
+  
+  # Avoid creating redundant backup snapshots if database hash has not changed:
+  dedup_by_hash: true
+  
+  # Include auxiliary state files (taste profile, download archive, playlist states) in bundle:
+  include_aux_files: true

@@ -124,6 +124,7 @@ Music_Engine/
     ├── genre_resolver.py       # Accurate multi-tag genre classification (Gemini + MusicBrainz)
     ├── telemetry.py            # ListenBrainz telemetry and scrobble synchronization
     ├── playlist_gen.py         # M3U8 playlist generator with metadata cache and Lune backup
+    ├── backup_manager.py       # Smart SQLite & state backup, hot snapshotting, migration & restore
     ├── ytm_extractor.py        # Bulk importer and Spotify/YTM track crossover
     ├── enrich_lyrics.py        # Bulk offline lyrics enricher and validator
     └── cli.py                  # CLI argument parsing and subcommands
@@ -287,6 +288,20 @@ Generates playlists with a dual strategy (universal M3U8 + native Lune JSON back
   - Combines English system playlists (`Permanent`, `Conveyor`, `Priority Discovery`, `Live Rotation`, `Cravings`), updated artist playlists, and preserved user-created playlists without ghost tracks.
   - **Tag Fidelity & Millisecond Precision:** Reads `title` and `artist` directly from physical Vorbis/ID3 tags with Mutagen and computes exact duration in milliseconds (`dur_ms`). Synced automatically via Syncthing.
 
+### 5.8. `src/backup_manager.py` (`BackupManager`)
+Centralized smart state backup, migration, and restoration engine:
+- **Single-File Unified Archives:** Every backup snapshot is packaged as **a single self-contained archive** (`music_engine_backup_YYYYMMDD_HHMMSS[_tag].tar.gz` for `format: "bundle"`), avoiding split files or clutter. Each bundle encapsulates:
+  - `conveyor_state.sqlite`: Hot backup of the database created via `sqlite3.backup()` API.
+  - `manifest.json`: Full metadata, timestamp, engine version, SHA-256 hashes, machine paths, and tags.
+  - `auxiliary/`: Companion runtime state (`taste_profile.json`, `download_archive.txt`, `playlist_folder_state.json`).
+- **Flexible Backup Formats:** Supports `format: "bundle"` (default recommended single `.tar.gz`) or `format: "db_only"` (single `.sqlite.gz` archive of just the database).
+- **Automated Lifecycle Integration (`auto_backup`):** Runs automatically on every engine cycle if `backup.auto_backup: true` is configured in `config.yaml`.
+- **Hot SQLite Snapshots:** Uses `sqlite3.backup()` API to create consistent snapshots even while the database is actively read/written in WAL mode, avoiding torn pages or lock contention.
+- **SHA-256 Hash Deduplication:** Computes and verifies SHA-256 hashes (stored internally in `data/.last_backup_hash`). If the database has not changed since the last snapshot, redundant backups are skipped unless forced with `--force`.
+- **Intelligent Retention Rotation (`max_backups`):** Automatically cleans oldest backups when the count exceeds the configured limit, ensuring zero manual maintenance.
+- **Cross-Computer Migration & Path Rebasing (`restore-backup`):** Restores any snapshot bundle on another machine. When migrating between computers with different usernames or directory paths, automatically detects and rewrites old filesystem paths in the database to match the new host's `storage.base_dir`.
+- **Pre-Restore Safety Snapshot:** Automatically generates an emergency fallback snapshot before modifying or overwriting active data during any restore operation.
+
 ---
 
 ## 6. Synchronization & Mobile Ecosystem
@@ -364,6 +379,15 @@ All commands are executed through `main.py` using the Python virtual environment
 
 # Classify and embed exact music genres into metadata and SQLite
 .venv/bin/python main.py enrich-genres [--limit 50] [--all] [--force-all] [--no-ai]
+
+# Create a manual state backup snapshot or list existing snapshots
+.venv/bin/python main.py backup [--tag <label>] [--force] [--list]
+
+# Export a portable migration bundle (.tar.gz) to transfer state to another PC
+.venv/bin/python main.py export-backup [-o /path/to/migration.tar.gz]
+
+# Restore a snapshot (.sqlite/.sqlite.gz) or migration bundle (.tar.gz) with automatic path rebasing
+.venv/bin/python main.py restore-backup <path/to/backup_file> [--target-base-dir /path/to/Music]
 ```
 
 ---

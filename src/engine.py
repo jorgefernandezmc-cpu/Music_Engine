@@ -22,6 +22,7 @@ from src.playlist_gen import PlaylistGenerator
 from src.sync import FileSyncManager
 from src.order_processor import OrderProcessor, DEFAULT_PETICIONES_HEADER, DEFAULT_ANTOJOS_HEADER
 from src.notifications import send_notification
+from src.backup_manager import BackupManager
 
 logger = logging.getLogger('engine')
 os.makedirs('logs', exist_ok=True)
@@ -65,6 +66,7 @@ class MusicEngine:
         self.playlists = PlaylistGenerator(db_path, self.paths)
         self.file_sync = FileSyncManager(db_path, self.paths, self.playlists, self.config)
         self.order_processor = OrderProcessor(db_path, config_path, self.paths, self.playlists, self.curator)
+        self.backup_manager = BackupManager(db_path, self.paths)
 
     def run(self, fill_mode=False):
         """Entry point for execution with exclusive lock (filelock)."""
@@ -284,18 +286,12 @@ class MusicEngine:
         self._check_daily_lyrics_scan()
         self._check_daily_genre_scan()
 
-        # 0. Daily database backup
-        os.makedirs('data/backups', exist_ok=True)
-        backup_name = f"data/backups/conveyor_state_{datetime.now().strftime('%Y%m%d')}.sqlite"
-        if not os.path.exists(backup_name):
+        # 0. Intelligent state snapshot on every run (if enabled in config)
+        if getattr(self.backup_manager, 'auto_backup_enabled', True):
             try:
-                shutil.copy2(self.db_path, backup_name)
-                backups = sorted([os.path.join('data/backups', f) for f in os.listdir('data/backups') if f.endswith('.sqlite')])
-                if len(backups) > self.max_db_backups:
-                    for old_b in backups[:-self.max_db_backups]:
-                        os.remove(old_b)
+                self.backup_manager.create_snapshot(tag="auto")
             except Exception as e:
-                logger.debug(f"Error managing DB backups: {e}")
+                logger.warning(f"Error creating automatic state backup: {e}")
 
         logger.info(f"Starting engine cycle (fill_mode={fill_mode})")
 

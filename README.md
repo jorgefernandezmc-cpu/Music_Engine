@@ -207,6 +207,14 @@ downloader:
   batch_size: 50
   cycle_max_downloads: 50
   retry_failed: true
+
+backup:
+  auto_backup: true               # Automatic snapshot on each run cycle
+  dir: "data/backups"             # Destination folder (~ expands to home)
+  max_backups: 10                 # Automatic rolling retention limit
+  format: "bundle"                # "bundle" (unified single .tar.gz) or "db_only" (.sqlite.gz)
+  dedup_by_hash: true             # Skip backup if database hash has not changed
+  include_aux_files: true         # Include taste profile, archives and state in bundle
 ```
 
 ### 2. API Keys & Telemetry (`config/.env`)
@@ -296,6 +304,9 @@ python main.py <command> [options]
 | `enrich-genres` | `[--limit N] [--all] [--force-all] [--no-ai]` | Classifies music genres via AI and MusicBrainz, injecting tags into files and SQLite. |
 | `enrich-metadata` | `[--limit N] [--force-all]` | Enriches track number and release date metadata across audio files and database. |
 | `fix-metadata` | `[--use-ai]` | Audits and repairs mismatched or non-album tracks (covers, live recordings, karaoke versions). |
+| `backup` | `[--tag TAG] [--force] [--list]` | Creates an intelligent hot SQLite snapshot with hash deduplication and rotation, or lists existing snapshots. |
+| `export-backup` | `[-o OUTPUT_PATH]` | Exports a complete portable migration bundle (`.tar.gz`) containing database, state files, and manifest to transfer to another PC. |
+| `restore-backup` | `<PATH> [--target-base-dir DIR] [--no-rebase]` | Restores a snapshot or migration bundle, automatically creating a pre-restore safety snapshot and rebasing file paths if moving between computers. |
 
 ### Quick Execution Script
 
@@ -447,6 +458,7 @@ The project follows a clean modular structure:
 | **Lyrics Provider** | [`src/lyrics_provider.py`](src/lyrics_provider.py) | Multi-source synchronized lyrics provider (LRCLIB, syncedlyrics, YTM). |
 | **Genre Resolver** | [`src/genre_resolver.py`](src/genre_resolver.py) | Audio genre classifier using Gemini LLM and MusicBrainz. |
 | **Playlist Gen** | [`src/playlist_gen.py`](src/playlist_gen.py) | Fast `.m3u8` playlist generation and Lune JSON backup with in-memory caching. |
+| **Backup Manager** | [`src/backup_manager.py`](src/backup_manager.py) | Smart state backup, hot SQLite snapshotting, deduplication, migration exports, and path rebasing. |
 | **Telemetry** | [`src/telemetry.py`](src/telemetry.py) | ListenBrainz API scrobble synchronization with fuzzy string matching. |
 | **Notifications** | [`src/notifications.py`](src/notifications.py) | Non-blocking Linux desktop notifications via `notify-send`. |
 
@@ -478,7 +490,7 @@ Review your `conveyor` configuration in `config/config.yaml`:
 
 - **100% Local**: All audio files, playlists, lyrics, and metadata reside directly on your own drives.
 - **No Vendor Lock-In**: Standard formats (`.opus`, `.m4a`, `.lrc`, `.m3u8`, SQLite) ensure your collection is accessible by any standard media player.
-- **Automated Backups**: The database automatically retains rolling SQLite backups under `data/backups/`.
+- **Automated Backups**: Single-file rolling snapshot bundles (`.tar.gz`) under `data/backups/` ensure zero-downtime hot state preservation and one-command migration.
 
 ---
 
