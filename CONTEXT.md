@@ -264,20 +264,27 @@ Central orchestrator of the music lifecycle.
 - Extracts candidate tracks from YouTube Music radios and filters out known or redundant songs.
 
 ### 5.7. `src/playlist_gen.py` (`PlaylistGenerator`)
-Generates playlists with a dual strategy (universal M3U8 + native Lune JSON backup) and reactive directory modification detection:
-- **Universal M3U8 Playlists:** Standard `#EXTM3U` and `#EXTINF` directives with exact durations and relative paths:
-  - `Permanente.m3u8`: Complete permanent collection organized alphabetically by Artist -> Album -> Track.
-  - `Cinta.m3u8`: All tracks currently rotating in the Conveyor buffer.
-  - `Descubrimiento_Prioritario.m3u8`: New Conveyor tracks awaiting first play (`play_count = 0`).
-  - `Rotación_Viva.m3u8`: Dynamic smart playlist (top played + related discoveries + forgotten gems).
+Generates playlists with a dual strategy (universal M3U8 + native Lune JSON backup) and reactive directory and file modification detection:
+- **Universal M3U8 Playlists (English Naming):** Standard `#EXTM3U` and `#EXTINF` directives with exact durations and relative paths:
+  - `Permanent.m3u8`: Complete permanent collection organized alphabetically by Artist -> Album -> Track.
+  - `Conveyor.m3u8`: All tracks currently rotating in the Conveyor buffer.
+  - `Priority_Discovery.m3u8`: New Conveyor tracks awaiting first play (`play_count = 0`).
+  - `Live_Rotation.m3u8`: Dynamic smart playlist (top played + related discoveries + forgotten gems).
+  - `Cravings.m3u8`: Tracks active in the temporary Cravings collection.
   - Individual Artist Playlists in `Playlists/Artistas/<Artist>.m3u8`: Inclusive and collaborative (tracks where artist is primary or featured). Filtered by configurable threshold (`playlists.min_artist_tracks`, default 10).
-- **Reactive Folder Change Detection:**
-  - Fast fingerprinting (<15 ms) using audio file counts, `mtime_ns`, and sizes (`data/playlist_folder_state.json`).
-  - `update_permanent_playlists`: Regenerates `Permanente.m3u8` and artist playlists when `Permanente` changes.
-  - `update_cinta_playlists`: Regenerates `Cinta.m3u8` and `Descubrimiento_Prioritario.m3u8` when `Cinta` changes.
-  - Integrated into all engine operations (promotions, purges, downloads, manual moves, hearts, and mailbox commands).
+  - Legacy Spanish playlist cleanup: automatically purges deprecated `.m3u8` aliases (`Permanente.m3u8`, `Cinta.m3u8`, `Descubrimiento_Prioritario.m3u8`, `Rotación_Viva.m3u8`, `Antojos.m3u8`).
+- **User-Created Lune Playlists (`Playlists/Listas Propias/`):**
+  - Extracts custom playlists created by the user inside Lune from `lune_playlists_backup.json` (or configured `playlists.lune_backup_file`).
+  - Resolves tracks against local disk using a multi-tiered search index (exact match, normalized title with artist token overlap, cleaned title with duration disambiguation).
+  - Generates standard `#EXTM3U` playlists inside `Playlists/Listas Propias/<Playlist>.m3u8` (configurable via `playlists.user_playlists_dir`) with relative paths (`../../Permanent/...`).
+  - Automatically cleans obsolete `.m3u8` files in `Listas Propias/` if removed in Lune.
+  - Automatically filters out deleted or purged tracks both from the generated `.m3u8` and from `lune_playlists_backup.json` while preserving valid tracks and Lune metadata (e.g. `dateAdded`).
+- **Reactive Change Detection (Folders & Lune Backup):**
+  - Fast fingerprinting (<15 ms) using audio file counts, `mtime_ns`, sizes, and SHA-256 backup file hashing (`data/playlist_folder_state.json`).
+  - Detects modifications to `Permanent`, `Conveyor`, `Cravings`, and `lune_playlists_backup.json`.
+  - When changes occur, runs `update_all_playlists` to re-sync Lune user playlists, update artist playlists with new releases, and re-export the unified JSON backup.
 - **Native Lune Backup (`lune_playlists_backup.json`):** Generates version 2 JSON backup required by Lune's native importer (`PlaylistBackupManager.kt`).
-  - Includes key playlists: `Permanente`, `Cinta`, `Descubrimiento Prioritario`, `Rotación Viva`, plus eligible artist playlists.
+  - Combines English system playlists (`Permanent`, `Conveyor`, `Priority Discovery`, `Live Rotation`, `Cravings`), updated artist playlists, and preserved user-created playlists without ghost tracks.
   - **Tag Fidelity & Millisecond Precision:** Reads `title` and `artist` directly from physical Vorbis/ID3 tags with Mutagen and computes exact duration in milliseconds (`dur_ms`). Synced automatically via Syncthing.
 
 ---

@@ -134,6 +134,20 @@ playlists:
   generate_lune_backup: false    # Set to true if you use Lune Android player for JSON playlist backup
   lune_include_artists: false   # Include per-artist playlists in Lune backup (if generate_lune_backup is true)
   min_artist_tracks: 10
+  
+  # Lune backup JSON file name (located inside playlists_dir):
+  lune_backup_file: "lune_playlists_backup.json"
+  
+  # Folder inside playlists_dir for user-created playlists exported from Lune:
+  user_playlists_dir: "Listas Propias"
+  
+  # System playlist file names (.m3u8 generated inside playlists_dir):
+  system_names:
+    permanent: "Permanent"
+    conveyor: "Conveyor"
+    priority_discovery: "Priority_Discovery"
+    live_rotation: "Live_Rotation"
+    cravings: "Cravings"
 
 # ------------------------------------------------------------------------------
 # 10. DESKTOP NOTIFICATIONS (LINUX)

@@ -122,9 +122,29 @@ class StoragePaths:
         # Backward compatibility
         return self.peticiones_file
 
+    @property
+    def lune_backup_file(self) -> str:
+        """Returns the configured Lune backup JSON filename."""
+        return self.config.get('playlists', {}).get('lune_backup_file', 'lune_playlists_backup.json')
+
+    @property
+    def lune_backup_path(self) -> str:
+        """Returns the absolute path to the Lune backup JSON file."""
+        return os.path.join(self.playlists_dir, self.lune_backup_file)
+
+    @property
+    def user_playlists_dir_name(self) -> str:
+        """Returns the configured folder name for user-created Lune playlists."""
+        return self.config.get('playlists', {}).get('user_playlists_dir', 'Listas Propias')
+
+    @property
+    def user_playlists_dir(self) -> str:
+        """Returns the absolute path to the folder containing user-created Lune playlists."""
+        return os.path.join(self.playlists_dir, self.user_playlists_dir_name)
+
     def ensure_dirs(self):
         """Ensures main directories exist and initializes default requests mailbox if missing."""
-        for d in [self.base_dir, self.cinta_dir, self.permanente_dir, self.cravings_dir, self.playlists_dir]:
+        for d in [self.base_dir, self.cinta_dir, self.permanente_dir, self.cravings_dir, self.playlists_dir, self.user_playlists_dir]:
             os.makedirs(d, exist_ok=True)
         if not os.path.exists(self.requests_file) or os.path.getsize(self.requests_file) == 0:
             try:

@@ -1,11 +1,13 @@
 import os
+import re
+import unicodedata
 import sqlite3
 import json
 import yaml
 import mutagen
 import hashlib
 import shutil
-from src.paths import StoragePaths
+from src.paths import StoragePaths, sanitize_filename
 from src.db import get_db_connection
 
 class PlaylistGenerator:
@@ -32,11 +34,31 @@ class PlaylistGenerator:
             
         self.playlists_dir = self.paths.playlists_dir
         self.artists_dir = os.path.join(self.playlists_dir, "Artistas")
+        
+        # User playlists folder inside Playlists/
+        self.lune_backup_file = self.config.get('playlists', {}).get('lune_backup_file', "lune_playlists_backup.json")
+        self.user_playlists_dir_name = self.config.get('playlists', {}).get('user_playlists_dir', "Listas Propias")
+        self.user_playlists_dir = os.path.join(self.playlists_dir, self.user_playlists_dir_name)
+
+        # Configurable English playlist names
+        sys_names = self.config.get('playlists', {}).get('system_names', {})
+        self.name_permanent = sys_names.get('permanent', 'Permanent')
+        self.name_conveyor = sys_names.get('conveyor', 'Conveyor')
+        self.name_priority_discovery = sys_names.get('priority_discovery', 'Priority_Discovery')
+        self.name_live_rotation = sys_names.get('live_rotation', 'Live_Rotation')
+        self.name_cravings = sys_names.get('cravings', 'Cravings')
+
         os.makedirs(self.playlists_dir, exist_ok=True)
         os.makedirs(self.artists_dir, exist_ok=True)
+        os.makedirs(self.user_playlists_dir, exist_ok=True)
+
         self.lune_playlists = {}
         self.state_file = "data/playlist_folder_state.json"
         self._meta_cache = {}
+
+    def _to_lune_display_name(self, name: str) -> str:
+        """Converts underscored filenames to displayable playlist names for Lune."""
+        return name.replace("_", " ")
 
     def _load_config(self) -> dict:
         """Loads configuration from config.yaml if it exists."""
@@ -182,9 +204,8 @@ class PlaylistGenerator:
     def generate_all_permanent_playlist(self, meta_map: dict) -> list[str]:
         """
         Generates M3U8 playlist with all permanent tracks in the collection.
-        Path: Playlists/Permanente.m3u8.
+        Path: Playlists/<name_permanent>.m3u8 (e.g. Permanent.m3u8).
         Sorted alphabetically by Artist -> Album -> Track.
-        Registered in Lune backup as 'Permanente'.
         """
         permanente_dir = self.paths.permanente_dir
         if not os.path.exists(permanente_dir):
@@ -197,16 +218,9 @@ class PlaylistGenerator:
                 if f.endswith(('.opus', '.m4a', '.mp3', '.flac')):
                     all_tracks.append(os.path.join(root, f))
 
-        m3u8_path = os.path.join(self.playlists_dir, "Permanente.m3u8")
-        self._write_playlist(m3u8_path, all_tracks, meta_map, register_for_lune=True, lune_name="Permanente")
-
-        # Clean redundant legacy alias if present
-        alias_path = os.path.join(self.playlists_dir, "Canciones_Permanentes.m3u8")
-        if os.path.exists(alias_path):
-            try:
-                os.remove(alias_path)
-            except Exception:
-                pass
+        m3u8_path = os.path.join(self.playlists_dir, f"{self.name_permanent}.m3u8")
+        lune_name = self._to_lune_display_name(self.name_permanent)
+        self._write_playlist(m3u8_path, all_tracks, meta_map, register_for_lune=True, lune_name=lune_name)
 
         print(f"[PlaylistGenerator] All permanent tracks playlist generated: {len(all_tracks)} tracks in {m3u8_path}")
         return all_tracks
@@ -303,14 +317,15 @@ class PlaylistGenerator:
             """)
             tracks = [r[0] for r in cursor.fetchall()]
 
-        m3u8_path = os.path.join(self.playlists_dir, "Descubrimiento_Prioritario.m3u8")
-        self._write_playlist(m3u8_path, tracks, meta_map, register_for_lune=True, lune_name="Descubrimiento Prioritario")
+        m3u8_path = os.path.join(self.playlists_dir, f"{self.name_priority_discovery}.m3u8")
+        lune_name = self._to_lune_display_name(self.name_priority_discovery)
+        self._write_playlist(m3u8_path, tracks, meta_map, register_for_lune=True, lune_name=lune_name)
 
     def generate_cinta_playlists(self, meta_map: dict):
         """
         Generates playlists associated with Conveyor folder:
-        1. Cinta.m3u8: All songs currently rotating on Conveyor.
-        2. Descubrimiento_Prioritario.m3u8: Unplayed Conveyor tracks (play_count = 0).
+        1. <name_conveyor>.m3u8: All songs currently rotating on Conveyor.
+        2. <name_priority_discovery>.m3u8: Unplayed Conveyor tracks (play_count = 0).
         """
         cinta_dir = self.paths.cinta_dir
         cinta_tracks = []
@@ -321,14 +336,15 @@ class PlaylistGenerator:
                     if f.endswith(('.opus', '.m4a', '.mp3', '.flac')):
                         cinta_tracks.append(os.path.join(root, f))
 
-        cinta_m3u8 = os.path.join(self.playlists_dir, "Cinta.m3u8")
-        self._write_playlist(cinta_m3u8, cinta_tracks, meta_map, register_for_lune=True, lune_name="Cinta")
+        cinta_m3u8 = os.path.join(self.playlists_dir, f"{self.name_conveyor}.m3u8")
+        lune_name = self._to_lune_display_name(self.name_conveyor)
+        self._write_playlist(cinta_m3u8, cinta_tracks, meta_map, register_for_lune=True, lune_name=lune_name)
         self.generate_descubrimiento_prioritario(meta_map)
 
     def generate_cravings_playlist(self, meta_map: dict):
         """
         Generates playlist for Cravings / Antojos:
-        Playlists/Antojos.m3u8 (or Playlists/Cravings.m3u8).
+        Playlists/<name_cravings>.m3u8 (e.g. Playlists/Cravings.m3u8).
         """
         cravings_dir = getattr(self.paths, 'cravings_dir', None)
         if not cravings_dir or not os.path.exists(cravings_dir):
@@ -341,18 +357,18 @@ class PlaylistGenerator:
                 if f.endswith(('.opus', '.m4a', '.mp3', '.flac')):
                     cravings_tracks.append(os.path.join(root, f))
 
-        folder_name = os.path.basename(cravings_dir.rstrip('/\\')) or "Antojos"
-        playlist_path = os.path.join(self.playlists_dir, f"{folder_name}.m3u8")
-        self._write_playlist(playlist_path, cravings_tracks, meta_map, register_for_lune=True, lune_name=folder_name)
+        playlist_path = os.path.join(self.playlists_dir, f"{self.name_cravings}.m3u8")
+        lune_name = self._to_lune_display_name(self.name_cravings)
+        self._write_playlist(playlist_path, cravings_tracks, meta_map, register_for_lune=True, lune_name=lune_name)
 
     def generate_rotacion_viva(self, meta_map: dict):
         """
-        Generates smart playlist Rotación Viva:
+        Generates smart playlist Live Rotation / Rotación Viva:
         - Top 20 most played songs
         - 5 discoveries proportional to favorite genres
         - 5 forgotten permanent songs (> 30 days without play)
         """
-        playlist_path = os.path.join(self.playlists_dir, "Rotación_Viva.m3u8")
+        playlist_path = os.path.join(self.playlists_dir, f"{self.name_live_rotation}.m3u8")
         
         with get_db_connection(self.db_path) as conn:
             cursor = conn.cursor()
@@ -422,40 +438,330 @@ class PlaylistGenerator:
             forgotten_paths = [r[0] for r in cursor.fetchall() if r[0] and os.path.exists(r[0])]
             
             all_paths = top_paths + discovery_paths + forgotten_paths
-            self._write_playlist(playlist_path, all_paths, meta_map, register_for_lune=True, lune_name="Rotación Viva")
-            print(f"[PlaylistGenerator] Rotación Viva generated: {len(all_paths)} tracks.")
+            lune_name = self._to_lune_display_name(self.name_live_rotation)
+            self._write_playlist(playlist_path, all_paths, meta_map, register_for_lune=True, lune_name=lune_name)
+            print(f"[PlaylistGenerator] {self.name_live_rotation} generated: {len(all_paths)} tracks in {playlist_path}")
 
-    def generate_lune_backup(self, meta_map: dict):
+    # --------------------------------------------------------------------------
+    # LUNE BACKUP RESOLUTION & USER PLAYLIST EXTRACTION
+    # --------------------------------------------------------------------------
+    def _normalize_for_match(self, s: str) -> str:
+        """Normalizes strings for reliable matching (lowercased, unaccented, alphanumeric)."""
+        if not s:
+            return ""
+        norm_s = unicodedata.normalize('NFKD', str(s))
+        norm_s = "".join(c for c in norm_s if not unicodedata.combining(c))
+        norm_s = norm_s.lower().strip()
+        norm_s = re.sub(r'[\(\)\[\]\{\}\.,:;!?\"\x27_\-]', ' ', norm_s)
+        return re.sub(r'\s+', ' ', norm_s).strip()
+
+    def _clean_song_title(self, s: str) -> str:
+        """Strips secondary parenthetical information or promotional tags from title."""
+        if not s:
+            return ""
+        cleaned = re.sub(r'\(.*?\)|\[.*?\]', '', str(s))
+        cleaned = re.sub(r'\b(?:feat|ft|remix|prod|prod by|audio oficial|video oficial|official audio|official video|lyric video|letra)\b.*', '', cleaned, flags=re.IGNORECASE)
+        return self._normalize_for_match(cleaned)
+
+    def _build_song_resolver_index(self, meta_map: dict) -> dict:
         """
-        Generates JSON file compatible with Lune native importer (MrDemonc/Lune):
-        Playlists/lune_playlists_backup.json
-        Structure required by Lune's PlaylistBackupManager:
-        {
-          "version": 2,
-          "playlists": [
-            {
-              "name": "...",
-              "songs": [
-                { "title": "...", "artist": "...", "duration": ms, "dateAdded": 0 }
-              ]
-            }
-          ],
-          "lyrics": []
+        Builds a multi-tiered in-memory index of all existing local audio files on disk
+        to map Lune backup metadata (title, artist, duration) to local files.
+        """
+        exact_index = {}       # (norm_art, norm_tit) -> (file_path, dur_ms)
+        title_index = {}       # norm_tit -> list of (norm_art, split_arts, file_path, dur_ms)
+        clean_title_index = {} # clean_tit -> list of (norm_art, split_arts, file_path, dur_ms)
+        seen_paths = set()
+
+        # 1. Query database for known active tracks
+        try:
+            with get_db_connection(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT file_path, artist, title, duration_seconds 
+                    FROM tracks 
+                    WHERE file_path IS NOT NULL AND status != 'PURGED'
+                """)
+                for f_path, art, tit, dur_s in cursor.fetchall():
+                    if f_path and os.path.exists(f_path):
+                        seen_paths.add(f_path)
+                        dur_ms = int(dur_s * 1000) if dur_s else 0
+                        self._add_to_resolver_indexes(exact_index, title_index, clean_title_index, f_path, art, tit, dur_ms)
+        except Exception:
+            pass
+
+        # 2. Query meta_map for any additional tracks on disk
+        if meta_map:
+            for f_path, (art, tit, dur_s) in meta_map.items():
+                if f_path and f_path not in seen_paths and os.path.exists(f_path):
+                    seen_paths.add(f_path)
+                    dur_ms = int(dur_s * 1000) if dur_s else 0
+                    self._add_to_resolver_indexes(exact_index, title_index, clean_title_index, f_path, art, tit, dur_ms)
+
+        return {
+            "exact": exact_index,
+            "title": title_index,
+            "clean_title": clean_title_index
         }
+
+    def _add_to_resolver_indexes(self, exact_index: dict, title_index: dict, clean_title_index: dict,
+                                 file_path: str, artist: str, title: str, dur_ms: int):
+        n_art = self._normalize_for_match(artist)
+        n_tit = self._normalize_for_match(title)
+        split_arts = [self._normalize_for_match(a) for a in self.split_artists(artist)]
+
+        entry = (n_art, split_arts, file_path, dur_ms)
+        exact_index[(n_art, n_tit)] = (file_path, dur_ms)
+        title_index.setdefault(n_tit, []).append(entry)
+
+        c_tit = self._clean_song_title(title)
+        if c_tit:
+            clean_title_index.setdefault(c_tit, []).append(entry)
+
+    def _pick_best_candidate(self, candidates: list, n_art: str, lune_split_arts: list, lune_dur_ms: int) -> tuple[str | None, int]:
+        if not candidates:
+            return None, 0
+
+        matching_artist = []
+        for cand_art, cand_splits, cand_path, cand_dur in candidates:
+            if not os.path.exists(cand_path):
+                continue
+            if n_art and (n_art in cand_art or cand_art in n_art):
+                matching_artist.append((cand_path, cand_dur))
+                continue
+            if any(sa in cand_splits for sa in lune_split_arts if sa):
+                matching_artist.append((cand_path, cand_dur))
+                continue
+            if any(ca in lune_split_arts for ca in cand_splits if ca):
+                matching_artist.append((cand_path, cand_dur))
+                continue
+
+        pool = matching_artist if matching_artist else [(c[2], c[3]) for c in candidates if os.path.exists(c[2])]
+        if not pool:
+            return None, 0
+
+        if len(pool) == 1:
+            return pool[0]
+
+        if lune_dur_ms > 0:
+            pool.sort(key=lambda item: abs(item[1] - lune_dur_ms))
+        return pool[0]
+
+    def resolve_lune_song(self, song: dict, index: dict) -> tuple[str | None, int]:
+        """
+        Resolves a song dictionary from Lune backup to an existing local physical audio file.
+        Returns (file_path, duration_ms) if found and physically present, or (None, 0).
+        """
+        raw_title = song.get("title", "")
+        raw_artist = song.get("artist", "")
+        lune_dur_ms = song.get("duration", 0)
+
+        n_tit = self._normalize_for_match(raw_title)
+        n_art = self._normalize_for_match(raw_artist)
+
+        # 1. Exact match on (artist, title)
+        exact_match = index["exact"].get((n_art, n_tit))
+        if exact_match and os.path.exists(exact_match[0]):
+            return exact_match[0], exact_match[1] or lune_dur_ms
+
+        # 2. Normalized title match with artist overlap
+        lune_split_arts = [self._normalize_for_match(a) for a in self.split_artists(raw_artist)]
+        candidates = index["title"].get(n_tit, [])
+        best_path, best_dur = self._pick_best_candidate(candidates, n_art, lune_split_arts, lune_dur_ms)
+        if best_path:
+            return best_path, best_dur or lune_dur_ms
+
+        # 3. Cleaned title match
+        c_tit = self._clean_song_title(raw_title)
+        if c_tit:
+            clean_candidates = index["clean_title"].get(c_tit, [])
+            best_path, best_dur = self._pick_best_candidate(clean_candidates, n_art, lune_split_arts, lune_dur_ms)
+            if best_path:
+                return best_path, best_dur or lune_dur_ms
+
+        return None, 0
+
+    def get_system_playlist_names(self) -> set[str]:
+        """Returns set of normalized names that represent system-generated playlists."""
+        names = {
+            "permanent", "permanente",
+            "conveyor", "cinta",
+            "priority discovery", "priority_discovery", "descubrimiento prioritario", "descubrimiento_prioritario",
+            "live rotation", "live_rotation", "rotacion viva", "rotación viva", "rotacion_viva", "rotación_viva",
+            "cravings", "antojos"
+        }
+        for n in [self.name_permanent, self.name_conveyor, self.name_priority_discovery, self.name_live_rotation, self.name_cravings]:
+            if n:
+                names.add(self._normalize_for_match(n))
+                names.add(self._normalize_for_match(n.replace("_", " ")))
+        return names
+
+    def get_known_artist_names(self) -> set[str]:
+        """Returns set of artist names that have dedicated automatic artist playlists."""
+        known = set()
+        perm_dir = self.paths.permanente_dir
+        if os.path.exists(perm_dir):
+            for entry in os.listdir(perm_dir):
+                if os.path.isdir(os.path.join(perm_dir, entry)):
+                    known.add(self._normalize_for_match(entry))
+        if os.path.exists(self.artists_dir):
+            for entry in os.listdir(self.artists_dir):
+                if entry.endswith('.m3u8'):
+                    base = os.path.splitext(entry)[0]
+                    known.add(self._normalize_for_match(base))
+        return known
+
+    def is_user_playlist(self, name: str, system_names: set[str], known_artists: set[str]) -> bool:
+        """Determines if a playlist from Lune backup was created by the user."""
+        norm_name = self._normalize_for_match(name)
+        if not norm_name:
+            return False
+        if norm_name in system_names:
+            return False
+        include_artists = self.config.get('playlists', {}).get('lune_include_artists', True)
+        if include_artists and norm_name in known_artists:
+            return False
+        return True
+
+    def sync_lune_user_playlists(self, meta_map: dict = None, resolver_index: dict = None) -> dict[str, list[dict]]:
+        """
+        Extracts user-created playlists from Lune backup JSON file:
+        - Resolves each song against physically existing local files.
+        - Removes deleted/missing songs from the playlist.
+        - Generates/updates .m3u8 playlists inside Playlists/Listas Propias/ (user_playlists_dir).
+        - Cleans obsolete .m3u8 files in user_playlists_dir if removed from Lune.
+        Returns: mapping of playlist_name -> list of cleaned song dicts to preserve in Lune JSON backup.
+        """
+        lune_json_path = os.path.join(self.playlists_dir, self.lune_backup_file)
+        if not os.path.exists(lune_json_path):
+            return {}
+
+        try:
+            with open(lune_json_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except Exception as e:
+            print(f"[PlaylistGenerator] Warning: Could not read Lune backup JSON ({lune_json_path}): {e}")
+            return {}
+
+        raw_playlists = data.get('playlists', [])
+        if not raw_playlists:
+            return {}
+
+        system_names = self.get_system_playlist_names()
+        known_artists = self.get_known_artist_names()
+
+        meta_map = meta_map or self._get_meta_map()
+        resolver_index = resolver_index or self._build_song_resolver_index(meta_map)
+
+        os.makedirs(self.user_playlists_dir, exist_ok=True)
+        user_playlists_cleaned = {}
+        active_m3u8_files = set()
+
+        for pl in raw_playlists:
+            pl_name = pl.get('name', '').strip()
+            if not pl_name:
+                continue
+
+            if not self.is_user_playlist(pl_name, system_names, known_artists):
+                continue
+
+            valid_paths = []
+            cleaned_songs = []
+
+            for song in pl.get('songs', []):
+                f_path, dur_ms = self.resolve_lune_song(song, resolver_index)
+                if f_path and os.path.exists(f_path):
+                    valid_paths.append(f_path)
+                    art, tit, _, real_ms = self._resolve_track_meta(f_path, meta_map)
+                    cleaned_songs.append({
+                        "title": tit or song.get("title", ""),
+                        "artist": art or song.get("artist", ""),
+                        "duration": real_ms or dur_ms or song.get("duration", 0),
+                        "dateAdded": song.get("dateAdded", 0)
+                    })
+
+            safe_name = sanitize_filename(pl_name)
+            m3u8_filename = f"{safe_name}.m3u8"
+            active_m3u8_files.add(m3u8_filename)
+            m3u8_path = os.path.join(self.user_playlists_dir, m3u8_filename)
+
+            if valid_paths:
+                self._write_playlist(m3u8_path, valid_paths, meta_map, register_for_lune=False)
+                user_playlists_cleaned[pl_name] = cleaned_songs
+                print(f"[PlaylistGenerator] User playlist '{pl_name}' synced: {len(valid_paths)} tracks -> {m3u8_path}")
+            else:
+                if os.path.exists(m3u8_path):
+                    try:
+                        os.remove(m3u8_path)
+                    except Exception:
+                        pass
+
+        # Clean obsolete user playlists in user_playlists_dir no longer present in Lune backup
+        if os.path.exists(self.user_playlists_dir):
+            for f in os.listdir(self.user_playlists_dir):
+                if f.endswith('.m3u8') and f not in active_m3u8_files:
+                    try:
+                        os.remove(os.path.join(self.user_playlists_dir, f))
+                        print(f"[PlaylistGenerator] Removed deleted user playlist: {f}")
+                    except Exception:
+                        pass
+
+        return user_playlists_cleaned
+
+    def _clean_legacy_playlists(self):
+        """
+        Cleans legacy Spanish-named .m3u8 playlists from playlists_dir
+        when English names or custom configured names are active.
+        """
+        configured_m3u8_names = {
+            f"{self.name_permanent}.m3u8",
+            f"{self.name_conveyor}.m3u8",
+            f"{self.name_priority_discovery}.m3u8",
+            f"{self.name_live_rotation}.m3u8",
+            f"{self.name_cravings}.m3u8",
+        }
+        legacy_candidates = [
+            "Permanente.m3u8", "Canciones_Permanentes.m3u8",
+            "Cinta.m3u8",
+            "Descubrimiento_Prioritario.m3u8",
+            "Rotación_Viva.m3u8", "Rotacion_Viva.m3u8",
+            "Antojos.m3u8"
+        ]
+        for leg in legacy_candidates:
+            if leg not in configured_m3u8_names:
+                leg_path = os.path.join(self.playlists_dir, leg)
+                if os.path.exists(leg_path):
+                    try:
+                        os.remove(leg_path)
+                        print(f"[PlaylistGenerator] Removed legacy Spanish playlist: {leg}")
+                    except Exception:
+                        pass
+
+    def generate_lune_backup(self, meta_map: dict, user_playlists: dict = None):
+        """
+        Generates or updates JSON file compatible with Lune native importer (MrDemonc/Lune):
+        Playlists/<lune_backup_file> (default: lune_playlists_backup.json).
+        Combines system playlists, updated artist playlists, and preserved user playlists,
+        filtering out any songs that were deleted from disk.
         """
         if not self.config.get('playlists', {}).get('generate_lune_backup', False):
             return
 
-        lune_json_path = os.path.join(self.playlists_dir, "lune_playlists_backup.json")
+        lune_json_path = os.path.join(self.playlists_dir, self.lune_backup_file)
+
+        # If user_playlists was not provided, extract and clean it from existing backup
+        if user_playlists is None:
+            user_playlists = self.sync_lune_user_playlists(meta_map)
+
         playlists_data = []
 
+        # 1. Registered system playlists and artist playlists
         for name, track_paths in self.lune_playlists.items():
             songs_list = []
             for p in track_paths:
                 if not p or not os.path.exists(p):
                     continue
                 art, tit, dur_s, dur_ms = self._resolve_track_meta(p, meta_map)
-
                 songs_list.append({
                     "title": str(tit).strip(),
                     "artist": str(art).strip(),
@@ -469,16 +775,38 @@ class PlaylistGenerator:
                     "songs": songs_list
                 })
 
+        # 2. Append preserved user playlists (already verified and cleaned of deleted tracks)
+        if user_playlists:
+            for u_name, u_songs in user_playlists.items():
+                if u_songs:
+                    playlists_data.append({
+                        "name": u_name,
+                        "songs": u_songs
+                    })
+
         export_data = {
             "version": 2,
             "playlists": playlists_data,
             "lyrics": []
         }
 
-        with open(lune_json_path, 'w', encoding='utf-8') as f:
-            json.dump(export_data, f, ensure_ascii=False, indent=2)
+        try:
+            with open(lune_json_path, 'w', encoding='utf-8') as f:
+                json.dump(export_data, f, ensure_ascii=False, indent=2)
+            print(f"[PlaylistGenerator] Lune playlist backup updated at: {lune_json_path} ({len(playlists_data)} playlists total).")
+        except Exception as e:
+            print(f"[PlaylistGenerator] Error writing Lune playlist backup: {e}")
 
-        print(f"[PlaylistGenerator] Lune playlist backup generated at: {lune_json_path} ({len(playlists_data)} playlists).")
+    def get_lune_backup_fingerprint(self) -> str:
+        """Calculates deterministic sha256 hash of the Lune backup JSON file."""
+        lune_path = os.path.join(self.playlists_dir, self.lune_backup_file)
+        if not os.path.exists(lune_path):
+            return ""
+        try:
+            with open(lune_path, 'rb') as f:
+                return hashlib.sha256(f.read()).hexdigest()
+        except Exception:
+            return ""
 
     def get_folder_fingerprint(self, folder_path: str) -> str:
         """Calculates deterministic fast fingerprint based on audio files, mtimes, and sizes."""
@@ -499,7 +827,7 @@ class PlaylistGenerator:
         return hashlib.sha256(";".join(entries).encode("utf-8")).hexdigest()
 
     def _load_folder_state(self) -> dict:
-        """Loads previous folder fingerprint state saved on disk."""
+        """Loads previous folder and Lune backup fingerprint state saved on disk."""
         if os.path.exists(self.state_file):
             try:
                 with open(self.state_file, 'r', encoding='utf-8') as f:
@@ -508,8 +836,8 @@ class PlaylistGenerator:
                 return {}
         return {}
 
-    def _save_folder_state(self, perm_fp: str = None, cinta_fp: str = None, cravings_fp: str = None):
-        """Saves current Permanent, Conveyor, and Cravings fingerprints in data/playlist_folder_state.json."""
+    def _save_folder_state(self, perm_fp: str = None, cinta_fp: str = None, cravings_fp: str = None, lune_fp: str = None):
+        """Saves current Permanent, Conveyor, Cravings, and Lune backup fingerprints in data/playlist_folder_state.json."""
         state = self._load_folder_state()
         if perm_fp is not None:
             state["permanente_fingerprint"] = perm_fp
@@ -526,6 +854,11 @@ class PlaylistGenerator:
         elif "cravings_fingerprint" not in state and hasattr(self.paths, 'cravings_dir'):
             state["cravings_fingerprint"] = self.get_folder_fingerprint(self.paths.cravings_dir)
 
+        if lune_fp is not None:
+            state["lune_backup_fingerprint"] = lune_fp
+        else:
+            state["lune_backup_fingerprint"] = self.get_lune_backup_fingerprint()
+
         try:
             os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
             with open(self.state_file, 'w', encoding='utf-8') as f:
@@ -534,69 +867,89 @@ class PlaylistGenerator:
             print(f"[PlaylistGenerator] Error saving folder state: {e}")
 
     def update_permanent_playlists(self, meta_map: dict = None):
-        """Updates global Permanent list, artist playlists, and cravings, syncing Lune."""
+        """Updates global Permanent list, artist playlists, cravings, and Lune backup."""
         print("[PlaylistGenerator] Updating Permanent playlists...")
-        self.lune_playlists = {}
-        meta_map = meta_map or self._get_meta_map()
-        self.generate_permanent_playlists(meta_map)
-        self.generate_cinta_playlists(meta_map)
-        self.generate_cravings_playlist(meta_map)
-        self.generate_rotacion_viva(meta_map)
-        self.generate_lune_backup(meta_map)
-        self._save_folder_state(perm_fp=self.get_folder_fingerprint(self.paths.permanente_dir))
+        self.update_all_playlists(meta_map=meta_map)
 
     def update_cinta_playlists(self, meta_map: dict = None):
-        """Updates playlists associated with Conveyor and Cravings folders, syncing Lune."""
-        print("[PlaylistGenerator] Updating playlists associated with Conveyor...")
-        self.lune_playlists = {}
-        meta_map = meta_map or self._get_meta_map()
-        self.generate_cinta_playlists(meta_map)
-        self.generate_permanent_playlists(meta_map)
-        self.generate_cravings_playlist(meta_map)
-        self.generate_rotacion_viva(meta_map)
-        self.generate_lune_backup(meta_map)
-        self._save_folder_state(cinta_fp=self.get_folder_fingerprint(self.paths.cinta_dir))
+        """Updates Conveyor playlists, cravings, and Lune backup."""
+        print("[PlaylistGenerator] Updating Conveyor playlists...")
+        self.update_all_playlists(meta_map=meta_map)
 
     def update_all_playlists(self, meta_map: dict = None):
-        """Updates all standard M3U8 playlists and JSON backup for Lune."""
+        """
+        Updates all standard M3U8 playlists (in English), extracts and syncs Lune user playlists
+        into user_playlists_dir, cleans legacy playlists, and updates Lune JSON backup.
+        """
         self.lune_playlists = {}
         meta_map = meta_map or self._get_meta_map()
+        resolver = self._build_song_resolver_index(meta_map)
+
+        # 1. Sync user-created playlists from Lune backup
+        user_playlists = self.sync_lune_user_playlists(meta_map, resolver)
+
+        # 2. Generate standard system playlists in English
         self.generate_cinta_playlists(meta_map)
         self.generate_permanent_playlists(meta_map)
         self.generate_cravings_playlist(meta_map)
         self.generate_rotacion_viva(meta_map)
-        self.generate_lune_backup(meta_map)
+
+        # 3. Clean legacy Spanish playlist files if English names are active
+        self._clean_legacy_playlists()
+
+        # 4. Generate refreshed Lune backup combining system, artists, and clean user playlists
+        self.generate_lune_backup(meta_map, user_playlists=user_playlists)
+
+        # 5. Save updated state fingerprints
         crav_fp = self.get_folder_fingerprint(self.paths.cravings_dir) if hasattr(self.paths, 'cravings_dir') else ""
         self._save_folder_state(
             perm_fp=self.get_folder_fingerprint(self.paths.permanente_dir),
             cinta_fp=self.get_folder_fingerprint(self.paths.cinta_dir),
-            cravings_fp=crav_fp
+            cravings_fp=crav_fp,
+            lune_fp=self.get_lune_backup_fingerprint()
         )
 
     def check_and_update_if_modified(self) -> dict:
         """
-        Checks whether Permanent, Conveyor, or Cravings directories were physically modified.
-        Returns: {'permanente_updated': bool, 'cinta_updated': bool, 'cravings_updated': bool}
+        Checks whether Permanent, Conveyor, Cravings directories or the Lune backup file were modified.
+        Returns: {'permanente_updated': bool, 'cinta_updated': bool, 'cravings_updated': bool, 'lune_updated': bool}
         """
         if not self.config.get('playlists', {}).get('auto_update_on_change', True):
-            return {"permanente_updated": False, "cinta_updated": False, "cravings_updated": False}
+            return {"permanente_updated": False, "cinta_updated": False, "cravings_updated": False, "lune_updated": False}
 
         state = self._load_folder_state()
         saved_perm = state.get("permanente_fingerprint", "")
         saved_cinta = state.get("cinta_fingerprint", "")
         saved_cravings = state.get("cravings_fingerprint", "")
+        saved_lune = state.get("lune_backup_fingerprint", "")
 
         curr_perm = self.get_folder_fingerprint(self.paths.permanente_dir)
         curr_cinta = self.get_folder_fingerprint(self.paths.cinta_dir)
         curr_cravings = self.get_folder_fingerprint(self.paths.cravings_dir) if hasattr(self.paths, 'cravings_dir') else ""
+        curr_lune = self.get_lune_backup_fingerprint()
 
         perm_changed = (curr_perm != saved_perm)
         cinta_changed = (curr_cinta != saved_cinta)
         cravings_changed = (curr_cravings != saved_cravings)
+        lune_changed = (bool(curr_lune) and curr_lune != saved_lune)
 
-        if perm_changed or cinta_changed or cravings_changed:
-            print("[PlaylistGenerator] Detected directory modifications. Updating all playlists...")
+        if perm_changed or cinta_changed or cravings_changed or lune_changed:
+            reasons = []
+            if perm_changed:
+                reasons.append("Permanent folder")
+            if cinta_changed:
+                reasons.append("Conveyor folder")
+            if cravings_changed:
+                reasons.append("Cravings folder")
+            if lune_changed:
+                reasons.append("Lune backup file")
+            print(f"[PlaylistGenerator] Detected changes in: {', '.join(reasons)}. Updating all playlists...")
             self.update_all_playlists()
 
-        return {"permanente_updated": perm_changed, "cinta_updated": cinta_changed, "cravings_updated": cravings_changed}
+        return {
+            "permanente_updated": perm_changed,
+            "cinta_updated": cinta_changed,
+            "cravings_updated": cravings_changed,
+            "lune_updated": lune_changed
+        }
 
