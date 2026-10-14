@@ -318,7 +318,13 @@ def main():
 
     subparsers.add_parser("doctor", help="Runs comprehensive health and diagnostic audit")
 
+    norm_p = subparsers.add_parser("normalize-audio", help="Calculates and embeds ReplayGain / EBU R128 loudness tags into audio files")
+    norm_p.add_argument("--limit", type=int, default=50, help="Maximum tracks to process (default: 50, 0=all)")
+    norm_p.add_argument("--all", action="store_true", help="Process entire library without limit")
+    norm_p.add_argument("--force", action="store_true", help="Recalculate even tracks with existing ReplayGain tags")
+
     args = parser.parse_args()
+
 
 
     db_path = "data/conveyor_state.sqlite"
@@ -562,8 +568,20 @@ def main():
         print("=======================================================\n")
     elif args.command == "doctor":
         sys.exit(run_doctor(db_path, config_path))
+    elif args.command == "normalize-audio":
+        from src.audio_processor import normalize_library_audio
+        limit = 0 if args.all else args.limit
+        print(f"Starting audio loudness normalization (Limit: {'No limit' if limit == 0 else limit} tracks, Force: {args.force})...")
+        stats = normalize_library_audio(db_path, config_path, limit=limit, force=args.force)
+        print("\nResults:")
+        print(f" - Library tracks: {stats['total']}")
+        print(f" - Evaluated:      {stats['processed']}")
+        print(f" - Tagged / R128:  {stats['tagged']}")
+        print(f" - Skipped (done): {stats['skipped']}")
+        print(f" - Failed:         {stats['failed']}")
     else:
         parser.print_help()
+
 
 
 

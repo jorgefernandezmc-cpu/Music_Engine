@@ -259,8 +259,14 @@ Resolves all absolute and relative paths based on `config/config.yaml`.
   2. *YouTube Music API Fallback* (fetches official lyrics via `get_watch_playlist` and `get_lyrics`).
   - Embeds Vorbis/MP4 tags (`LYRICS`, `SYNCEDLYRICS`, `UNSYNCEDLYRICS`) directly into the audio file.
   - Generates contiguous sidecar `.lrc` file (`<Track>.lrc`) for universal mobile player support.
+- **Non-Destructive Loudness Normalization (ReplayGain / EBU R128):**
+  - Measures integrated loudness and true peak with `ffmpeg`'s `ebur128` filter (`src/audio_processor.py`).
+  - Embeds non-destructive tags (`REPLAYGAIN_TRACK_GAIN`, `REPLAYGAIN_TRACK_PEAK`, and RFC 7845 `R128_TRACK_GAIN` for Opus; iTunes tags for M4A) without transcoding or generational quality loss.
+  - Target loudness: `-18.0` LUFS (configurable via `downloader.target_lufs`, default `apply_replaygain: true`).
+  - Retroactive library normalization command: `python main.py normalize-audio [--all] [--limit 50] [--force]`.
 
 ### 5.4. `src/engine.py` (`MusicEngine`)
+
 Central orchestrator of the music lifecycle.
 - **Concurrency lock:** `FileLock('data/engine.lock')`.
 - **Lifecycle execution flow (`run`):**
@@ -444,7 +450,11 @@ All commands are executed through `main.py` using the Python virtual environment
 
 # Run comprehensive system health and diagnostic audit
 .venv/bin/python main.py doctor
+
+# Measure loudness and embed ReplayGain / EBU R128 tags across existing tracks
+.venv/bin/python main.py normalize-audio [--limit 50] [--all] [--force]
 ```
+
 
 
 ---

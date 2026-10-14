@@ -17,6 +17,7 @@ from src.album_resolver import get_primary_artist
 from src.lyrics_provider import get_lyrics, send_grouped_lyrics_notification
 from src.genre_resolver import resolve_genre
 from src.db import get_db_connection
+from src.audio_processor import calculate_and_apply_gain, calculate_r128_gain, apply_replaygain_tags, normalize_library_audio
 
 
 logger = logging.getLogger('downloader')
@@ -218,7 +219,13 @@ class Downloader:
                             
                         if os.path.exists(thumb_path):
                             os.remove(thumb_path)
+
+                        # Apply non-destructive ReplayGain / EBU R128 loudness tags
+                        if self.dl_config.get('apply_replaygain', True):
+                            target_lufs = float(self.dl_config.get('target_lufs', -18.0))
+                            calculate_and_apply_gain(actual_path, target_lufs=target_lufs)
                     except Exception as meta_e:
+
                         logger.error(f"Failed applying metadata with mutagen to {t_id}: {meta_e}")
                         
                     cursor.execute("""

@@ -90,6 +90,11 @@ downloader:
   
   # Automatically retry downloads with errors:
   retry_failed: true
+  
+  # Non-destructive ReplayGain / EBU R128 loudness normalization:
+  apply_replaygain: true
+  target_lufs: -18.0  # Industry standard for mobile streaming / ReplayGain
+
 
 # ------------------------------------------------------------------------------
 # 5. TELEMETRY (LISTENBRAINZ)
