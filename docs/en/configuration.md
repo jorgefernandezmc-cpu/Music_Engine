@@ -201,6 +201,20 @@ backup:
 
 ---
 
+### System Language & Localization
+
+```yaml
+system:
+  # Interface language for user-facing elements:
+  # Options: "en" (English, default) | "es" (Spanish)
+  language: "en"
+```
+
+- **User-facing localization:** Configures the tutorial guide header in `requests.txt` (or `peticiones.txt`) and desktop notifications (`notify-send`).
+- **Seamless on-the-fly switching:** If you change this setting between `"en"` and `"es"`, Music Engine automatically and intelligently refreshes the tutorial header in your requests mailbox on the very next run cycle without altering file paths or losing any pending user requests.
+
+---
+
 ## 2. Environment Secrets (`config/.env`)
 
 Copy the environment secrets template:

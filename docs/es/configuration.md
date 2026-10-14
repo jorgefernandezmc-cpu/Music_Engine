@@ -201,6 +201,20 @@ backup:
 
 ---
 
+### Idioma del Sistema y Localización
+
+```yaml
+system:
+  # Idioma de la interfaz y elementos de cara al usuario:
+  # Opciones: "en" (Inglés, por defecto) | "es" (Español)
+  language: "en"
+```
+
+- **Localización de cara al usuario:** Modifica la cabecera explicativa de ayuda en `requests.txt` (o `peticiones.txt`) y las notificaciones de escritorio (`notify-send`).
+- **Cambio inteligente al vuelo:** Si un día decides cambiar de `"en"` a `"es"` (o viceversa), Music Engine detecta la variación en la siguiente ejecución y actualiza la cabecera explicativa del buzón al nuevo idioma sin renombrar archivos ni perder ninguna orden de usuario pendiente.
+
+---
+
 ## 2. Secretos y Variables de Entorno (`config/.env`)
 
 Copia la plantilla de secretos y variables de entorno:

@@ -52,6 +52,9 @@ The **Remote Control Mailbox** allows you to issue commands, download albums, qu
 3. Save the file. **Syncthing** syncs it instantly to your PC.
 4. On the next engine run cycle (via `systemd` or manual `main.py run`), the engine parses, executes, and clears successful orders while leaving error feedback if a song cannot be found.
 
+> [!TIP]
+> **Automatic Header Language Adaptation:** The tutorial guide header in `requests.txt` automatically matches your `system.language` setting (`"en"` or `"es"` in `config/config.yaml`). If you switch languages, the engine automatically updates the guide header on the next cycle while preserving all of your pending orders and notes!
+
 ---
 
 ## 📋 Command Syntax Summary Table

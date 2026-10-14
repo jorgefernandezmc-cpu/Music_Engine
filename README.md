@@ -56,6 +56,7 @@ Music Engine replaces static playlists with an **automated musical conveyor belt
 - 🎧 **Offline-First Telemetry**: Offline scrobbling via **Pano Scrobbler** + **ListenBrainz** closes the loop: mobile playback counts and favorites drive desktop promotions.
 - 💾 **Smart Backups & PC Migration**: Zero-downtime hot SQLite snapshots with SHA-256 deduplication and one-command migration bundles (`.tar.gz`) with automatic path rebasing.
 - ⏰ **Unattended Automation**: Fully automated daily execution via non-privileged Linux systemd user timers.
+- 🌐 **Bilingual User Experience**: User-facing mailbox guide (`requests.txt` / `peticiones.txt`) and desktop notifications adapt to English or Spanish (`system.language`) with seamless on-the-fly header updates.
 
 ---
 

@@ -186,3 +186,15 @@ backup:
   
   # Include auxiliary state files (taste profile, download archive, playlist states) in bundle:
   include_aux_files: true
+
+# ------------------------------------------------------------------------------
+# 13. SYSTEM LANGUAGE & LOCALIZATION
+# ------------------------------------------------------------------------------
+system:
+  # Language for user-facing elements (requests mailbox guide header & desktop notifications)
+  # Options:
+  # - "en" (English, default)
+  # - "es" (Spanish)
+  # Note: The engine and CLI commands accept both English and Spanish orders seamlessly.
+  # If you change this setting, the mailbox header will automatically update on the next run.
+  language: "en"

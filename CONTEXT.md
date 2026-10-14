@@ -227,6 +227,10 @@ Resolves all absolute and relative paths based on `config/config.yaml`.
   - `get_craving_track_path(artist, album, title, ext='.opus')`
   - Backward-compatible aliases: `get_permanente_track_path`, `get_cinta_track_path`, `get_antojo_track_path`.
   - Properties: `cravings_dir` (alias `antojos_dir`), `conveyor_dir` (`cinta_dir`), `permanent_dir` (`permanente_dir`).
+- **Dynamic Mailbox Header Synchronization (`sync_mailbox_header`):**
+  - Reads `system.language` from `config/config.yaml` (`"en"` default, or `"es"`).
+  - Automatically ensures the tutorial guide header in `requests.txt` matches the active language, swapping headers cleanly if the user switches languages without deleting or altering pending user orders.
+  - Bilingual notification support in `src/notifications.py` (`notify-send`).
 
 ### 5.2. `src/album_resolver.py` (`resolve_album_track`, `get_primary_artist`)
 - **Primary artist extraction:**

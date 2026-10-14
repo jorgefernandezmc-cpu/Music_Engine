@@ -15,7 +15,7 @@ from mutagen.oggopus import OggOpus
 from mutagen.mp4 import MP4
 
 from src.db import get_db_connection
-from src.paths import StoragePaths, sanitize_filename, DEFAULT_REQUESTS_HEADER, DEFAULT_PETICIONES_HEADER
+from src.paths import StoragePaths, sanitize_filename, DEFAULT_REQUESTS_HEADER, DEFAULT_PETICIONES_HEADER, get_mailbox_header
 from src.notifications import send_notification
 from src.album_resolver import get_primary_artist, auto_fix_track, resolve_album_track
 from src.genre_resolver import clean_genre_string, apply_genre_metadata, resolve_genre
@@ -517,10 +517,16 @@ class OrderProcessor:
                     for hl in header_lines:
                         f.write(hl if hl.endswith('\n') else hl + '\n')
                 else:
-                    f.write(DEFAULT_PETICIONES_HEADER + '\n')
+                    target_header = get_mailbox_header(self.paths.language)
+                    f.write(target_header if target_header.endswith('\n') else target_header + '\n')
 
                 if failed_lines:
-                    f.write("\n# --- UNCOMPLETED ORDERS (See details below) ---\n")
+                    uncompleted_title = (
+                        "\n# --- ÓRDENES NO COMPLETADAS (Ver detalles abajo) ---\n"
+                        if self.paths.language == "es"
+                        else "\n# --- UNCOMPLETED ORDERS (See details below) ---\n"
+                    )
+                    f.write(uncompleted_title)
                     for fl in failed_lines:
                         f.write(fl if fl.endswith('\n') else fl + '\n')
         except Exception as e:

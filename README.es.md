@@ -56,6 +56,7 @@ Music Engine reemplaza las listas de reproducción estáticas por una **cinta tr
 - 🎧 **Telemetría Offline-First**: El registro de reproducciones (*scrobbling*) local mediante **Pano Scrobbler** + **ListenBrainz** cierra el bucle: las reproducciones y favoritos del móvil guían las promociones en el ordenador.
 - 💾 **Copias de Seguridad Inteligentes y Migración entre PCs**: Instantáneas en caliente de SQLite con deduplicación por hash SHA-256 y paquetes de migración portables (`.tar.gz`) con reasignación automática de rutas (*path rebasing*).
 - ⏰ **Automatización Desatendida**: Ejecución diaria totalmente automática mediante temporizadores de usuario de Linux systemd sin necesidad de privilegios root.
+- 🌐 **Experiencia de Usuario Bilingüe**: La cabecera del buzón (`requests.txt` / `peticiones.txt`) y las notificaciones de escritorio se adaptan a inglés o español (`system.language`) con actualización inteligente de cabeceras al vuelo.
 
 ---
 

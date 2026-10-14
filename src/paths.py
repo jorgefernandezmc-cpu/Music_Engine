@@ -12,7 +12,7 @@ def sanitize_filename(name: str) -> str:
     name = name.strip('. ')
     return name or "Unknown"
 
-DEFAULT_REQUESTS_HEADER = """# ==============================================================================
+DEFAULT_REQUESTS_HEADER_EN = """# ==============================================================================
 #                      REMOTE REQUESTS AND COMMANDS MAILBOX
 # ==============================================================================
 # Write your requests or commands at the bottom of this file (one per line).
@@ -60,7 +60,65 @@ DEFAULT_REQUESTS_HEADER = """# =================================================
 # WRITE YOUR REQUESTS BELOW:
 """
 
-DEFAULT_PETICIONES_HEADER = DEFAULT_REQUESTS_HEADER
+DEFAULT_REQUESTS_HEADER_ES = """# ==============================================================================
+#                    BUZÓN REMOTO DE PETICIONES Y COMANDOS
+# ==============================================================================
+# Escribe tus peticiones o comandos al final de este archivo (uno por línea).
+# Esta cabecera siempre se conserva; solo se borrarán las órdenes completadas.
+# Si alguna orden no puede completarse, se indicará el motivo aquí mismo.
+#
+# 1. PEDIR CANCIONES (PERMANENTE O ANTOJO TEMPORAL):
+#    - Permanente:  Descargar "Título" de Artista  O  permanente: Artista - Tema
+#    - Antojo:      antojo: Artista - Tema  O  craving: Artista - Tema
+#    - Descubrir:   Duki / Melodic techno para entrenar (Catálogo IA -> Permanente)
+#
+# 2. DESCARGAR DISCOS COMPLETOS (Catálogo oficial de álbumes completos):
+#    - Álbum permanente: disco: Artista - Disco  O  album: Artista - Álbum
+#    - Álbum en antojo:  antojo album: Artista - Disco  O  craving album: Artista - Álbum
+#
+# 3. REASIGNAR CANCIÓN A ÁLBUM OFICIAL (Mueve archivos físicos y etiquetas):
+#    album: <Tema> -> <Nombre del Álbum>
+#    Ejemplo:  album: NO PIENSO LLAMAR -> STORM
+#
+# 4. CORREGIR O ASIGNAR GÉNERO (SQLite + Metadatos físicos):
+#    genero: <Tema> -> <Nuevo Género>
+#    Ejemplo:  genero: So Payaso -> Hard Rock / Rock
+#    (O dejar sin flecha para auto-corregir con IA:  genero: Neverita)
+#
+# 5. ACTUALIZAR LETRAS SINCRONIZADAS (Descarga en tiempo real de .lrc sincronizado):
+#    letra: <Tema>  O  lyrics: <Tema>
+#    Ejemplo:  letra: Bohemian Rhapsody
+#
+# 6. BLINDAR / PROMOVER TEMA A PERMANENTE (Mueve de Cinta o Antojos a Permanente):
+#    favorita: <Tema>  O  permanente: <Tema>
+#    Ejemplo:  favorita: Cuica
+#
+# 7. BORRAR / PURGAR TEMA (Eliminación física de Cinta o Antojos):
+#    borrar: <Tema>  O  eliminar: <Tema>
+#    Ejemplo:  borrar: Canción Que No Me Gusta
+#
+# 8. REPARAR PISTA DUDOSA / AUDITAR VERSIÓN OFICIAL:
+#    reparar: <Nombre del Tema>  O  fix: <Nombre del Tema>
+#    Ejemplo:  reparar: Me Enamoraste
+#
+# 9. GENERAR RADIO LOCAL INSTANTÁNEA (de tu colección sin conexión):
+#    radio: <Ambiente o Estilo>
+#    Ejemplo:  radio: Acústico relajante
+# ==============================================================================
+# ESCRIBE TUS PETICIONES DEBAJO:
+"""
+
+DEFAULT_REQUESTS_HEADER = DEFAULT_REQUESTS_HEADER_EN
+DEFAULT_PETICIONES_HEADER = DEFAULT_REQUESTS_HEADER_ES
+
+
+def get_mailbox_header(language: str = "en") -> str:
+    """Returns the mailbox header template for the requested language ('en' or 'es')."""
+    lang = (language or "en").strip().lower()
+    if lang == "es":
+        return DEFAULT_REQUESTS_HEADER_ES
+    return DEFAULT_REQUESTS_HEADER_EN
+
 
 class StoragePaths:
     """
@@ -116,6 +174,11 @@ class StoragePaths:
             self.requests_file = cand_configured
             
         self.peticiones_file = self.requests_file
+        
+        # System language ("en" or "es", default: "en")
+        self.language = str(self.config.get('system', {}).get('language', 'en')).strip().lower()
+        if self.language not in ['en', 'es']:
+            self.language = 'en'
             
     @property
     def antojos_file(self) -> str:
@@ -148,19 +211,82 @@ class StoragePaths:
         configured = self.config.get('backup', {}).get('dir', self.config.get('storage', {}).get('backup_dir', 'data/backups'))
         return os.path.abspath(os.path.expanduser(configured))
 
-    def ensure_dirs(self):
-        """Ensures main directories exist and initializes default requests mailbox if missing."""
-        for d in [self.base_dir, self.cinta_dir, self.permanente_dir, self.cravings_dir, self.playlists_dir, self.user_playlists_dir, self.backup_dir]:
-            os.makedirs(d, exist_ok=True)
+    def sync_mailbox_header(self):
+        """
+        Ensures the mailbox file exists and has the guide header in the configured language.
+        If the user changed system.language in config.yaml, updates the header
+        without removing or modifying any user requests, commands, or error notes.
+        """
+        target_header = get_mailbox_header(self.language)
         if not os.path.exists(self.requests_file) or os.path.getsize(self.requests_file) == 0:
             try:
                 with open(self.requests_file, 'w', encoding='utf-8') as f:
-                    f.write(DEFAULT_REQUESTS_HEADER)
+                    f.write(target_header)
             except Exception:
                 try:
                     open(self.requests_file, 'a').close()
                 except Exception:
                     pass
+            return
+
+        try:
+            with open(self.requests_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+        except Exception:
+            return
+
+        # Check if the file contains one of our recognized tutorial headers
+        is_en_header = "REMOTE REQUESTS AND COMMANDS MAILBOX" in content
+        is_es_header = "BUZÓN REMOTO DE PETICIONES Y COMANDOS" in content
+
+        # If it doesn't have either header, it is a custom user file, leave untouched
+        if not is_en_header and not is_es_header:
+            return
+
+        # Check if header already matches target language
+        target_is_es = (self.language == "es")
+        if target_is_es and is_es_header and not is_en_header:
+            return
+        if not target_is_es and is_en_header and not is_es_header:
+            return
+
+        # Separate header lines from user commands
+        lines = content.splitlines(keepends=True)
+        user_lines = []
+        in_header = True
+
+        for line in lines:
+            s_line = line.strip()
+            if in_header:
+                if (s_line.startswith("# WRITE YOUR REQUESTS BELOW:") or
+                    s_line.startswith("# ESCRIBE TUS PETICIONES DEBAJO:")):
+                    in_header = False
+                elif not s_line.startswith("#") and s_line != "":
+                    in_header = False
+                    user_lines.append(line)
+            else:
+                user_lines.append(line)
+
+        # Reconstruct with target header and preserved user commands
+        new_content = target_header
+        if user_lines:
+            if not new_content.endswith("\n"):
+                new_content += "\n"
+            while user_lines and user_lines[0].strip() == "":
+                user_lines.pop(0)
+            new_content += "".join(user_lines)
+
+        try:
+            with open(self.requests_file, 'w', encoding='utf-8') as f:
+                f.write(new_content)
+        except Exception:
+            pass
+
+    def ensure_dirs(self):
+        """Ensures main directories exist and initializes or syncs requests mailbox."""
+        for d in [self.base_dir, self.cinta_dir, self.permanente_dir, self.cravings_dir, self.playlists_dir, self.user_playlists_dir, self.backup_dir]:
+            os.makedirs(d, exist_ok=True)
+        self.sync_mailbox_header()
 
     def get_permanente_track_path(self, artist: str, album: str, title: str, ext: str = "opus") -> str:
         """

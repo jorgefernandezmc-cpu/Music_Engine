@@ -21,7 +21,7 @@ from src.downloader import Downloader
 from src.playlist_gen import PlaylistGenerator
 from src.sync import FileSyncManager
 from src.order_processor import OrderProcessor, DEFAULT_PETICIONES_HEADER, DEFAULT_ANTOJOS_HEADER
-from src.notifications import send_notification
+from src.notifications import send_notification, set_notification_language
 from src.backup_manager import BackupManager
 
 logger = logging.getLogger('engine')
@@ -42,6 +42,7 @@ class MusicEngine:
             self.config = yaml.safe_load(f) or {}
 
         self.paths = StoragePaths(config_path)
+        set_notification_language(self.paths.language)
         self.paths.ensure_dirs()
 
         # Modular configuration

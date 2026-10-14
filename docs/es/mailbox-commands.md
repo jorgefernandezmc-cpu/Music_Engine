@@ -52,6 +52,9 @@ El **Buzón de Control Remoto** te permite enviar instrucciones, descargar álbu
 3. Guarda el archivo. **Syncthing** lo sincroniza al instante con tu ordenador.
 4. En el siguiente ciclo de ejecución (mediante `systemd` o ejecutando manualmente `python main.py run`), el motor interpreta las órdenes, las ejecuta, borra las completadas y añade explicaciones en caso de error.
 
+> [!TIP]
+> **Adaptación Automática del Idioma de la Cabecera:** La cabecera explicativa de ayuda en `requests.txt` (o `peticiones.txt`) se adapta automáticamente al ajuste `system.language` (`"en"` o `"es"` en `config/config.yaml`). Si cambias de idioma, el motor actualiza la cabecera en la siguiente ejecución manteniendo intactas todas tus órdenes y notas pendientes.
+
 ---
 
 ## 📋 Tabla Resumen de Sintaxis de Comandos
