@@ -16,7 +16,8 @@ All detailed technical specifications, root causes, line-number references, and 
 
 | **P2** | **TASK-04** | **Curator Local Radio Context & Scalability** | `src/curator_llm.py` | ✅ Completed | [📄 View Spec](tasks/04_CURATOR_LOCAL_RADIO_OPTIMIZATION.md) |
 
-| **P2** | **TASK-05** | **System Health Audit (`doctor` command) & Syncthing Cleaner** | `src/cli.py`, `src/sync.py`, `src/engine.py` | [📄 View Spec](tasks/05_SYNCTHING_CONFLICTS_AND_HEALTH_DOCTOR.md) |
+| **P2** | **TASK-05** | **System Health Audit (`doctor` command) & Syncthing Cleaner** | `src/cli.py`, `src/sync.py`, `src/engine.py` | ✅ Completed | [📄 View Spec](tasks/05_SYNCTHING_CONFLICTS_AND_HEALTH_DOCTOR.md) |
+
 | **P3** | **TASK-06** | **Audio Loudness Normalization (ReplayGain / EBU R128)** | `src/downloader.py`, `config/config.yaml.template` | [📄 View Spec](tasks/06_REPLAYGAIN_LOUDNESS_NORMALIZATION.md) |
 | **P3** | **TASK-07** | **Dynamic Affinity Scoring for Conveyor Lifecycle** | `src/engine.py`, `database/schema.sql` | [📄 View Spec](tasks/07_SMART_CONVEYOR_SCORING.md) |
 

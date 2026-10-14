@@ -66,6 +66,200 @@ def get_status(db_path="data/conveyor_state.sqlite", config_path="config/config.
     print("="*45 + "\n")
 
 
+def run_doctor(db_path="data/conveyor_state.sqlite", config_path="config/config.yaml") -> int:
+    """
+    Executes a comprehensive, non-destructive health and diagnostic audit of Music Engine:
+    - SQLite database integrity and table statistics
+    - Storage paths availability, permissions, and disk space
+    - External API connectivity (Gemini, ListenBrainz, LRCLIB, YouTube Music)
+    - Library integrity (missing files, unindexed audio, lyrics coverage, Syncthing conflicts)
+    """
+    import shutil
+    import time
+    import re
+    import requests
+    from dotenv import load_dotenv
+    import yaml
+    from ytmusicapi import YTMusic
+    from google import genai
+
+    env_path = os.path.join(os.path.dirname(config_path), '.env')
+    load_dotenv(env_path)
+
+    config = {}
+    if os.path.exists(config_path):
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f) or {}
+
+    paths = StoragePaths(config_path)
+
+    print("\n" + "="*51)
+    print(" MUSIC ENGINE SYSTEM HEALTH AUDIT (DOCTOR)")
+    print("="*51)
+
+    # 1. SQLite Database Integrity
+    if not os.path.exists(db_path):
+        print(f"[x] SQLite Database: Database file missing ({db_path})")
+    else:
+        try:
+            with get_db_connection(db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("PRAGMA integrity_check;")
+                row = cursor.fetchone()
+                check_result = row[0] if row else "unknown"
+
+                cursor.execute("SELECT COUNT(*) FROM tracks;")
+                track_count = cursor.fetchone()[0]
+
+            if check_result.lower() == "ok":
+                print(f"[✓] SQLite Database: Ok (Integrity check passed, {track_count:,} tracks)")
+            else:
+                print(f"[x] SQLite Database: Integrity check failed ({check_result})")
+        except Exception as e:
+            print(f"[x] SQLite Database: Error querying database ({e})")
+
+    # 2. Storage Paths & Disk Space
+    base_exists = os.path.exists(paths.base_dir)
+    if not base_exists:
+        print(f"[x] Storage Paths: Base directory missing ({paths.base_dir})")
+    else:
+        try:
+            stat = shutil.disk_usage(paths.base_dir)
+            free_gb = stat.free / (1024 ** 3)
+            mount_display = paths.base_dir
+            if free_gb < 5.0:
+                print(f"[!] Storage Paths: Low disk space ({free_gb:.1f} GB free on {mount_display})")
+            else:
+                print(f"[✓] Storage Paths: Ok ({free_gb:.1f} GB free on {mount_display})")
+        except Exception as e:
+            print(f"[!] Storage Paths: Accessible but disk usage failed ({e})")
+
+    # 3. LRCLIB API Ping
+    try:
+        t0 = time.time()
+        r_lrc = requests.get("https://lrclib.net/api/search?q=test", timeout=3)
+        latency_ms = int((time.time() - t0) * 1000)
+        if r_lrc.status_code == 200:
+            print(f"[✓] LRCLIB API: Accessible (latency: {latency_ms}ms)")
+        else:
+            print(f"[!] LRCLIB API: HTTP status {r_lrc.status_code} (latency: {latency_ms}ms)")
+    except Exception as e:
+        print(f"[!] LRCLIB API: Unreachable ({e})")
+
+    # 4. YouTube Music API
+    try:
+        yt = YTMusic()
+        res = yt.search("test", filter="songs", limit=1)
+        if res:
+            print("[✓] YouTube Music: Operational")
+        else:
+            print("[!] YouTube Music: Empty search result")
+    except Exception as e:
+        print(f"[!] YouTube Music: Operational check failed ({e})")
+
+    # 5. ListenBrainz Authentication
+    lb_user = os.getenv("LISTENBRAINZ_USER")
+    lb_token = os.getenv("LISTENBRAINZ_TOKEN")
+    if not lb_user or "your_" in lb_user or not lb_token or "your_" in lb_token:
+        print("[!] ListenBrainz: Not configured (missing or default token in .env)")
+    else:
+        try:
+            r_lb = requests.get(
+                "https://api.listenbrainz.org/1/validate-token",
+                headers={"Authorization": f"Token {lb_token}"},
+                timeout=5
+            )
+            if r_lb.status_code == 200 and r_lb.json().get("valid") is True:
+                print(f"[✓] ListenBrainz: Authenticated (User: @{lb_user})")
+            else:
+                print(f"[x] ListenBrainz: Token invalid or rejected (HTTP {r_lb.status_code})")
+        except Exception as e:
+            print(f"[!] ListenBrainz: Validation request failed ({e})")
+
+    # 6. Google Gemini API
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    model_name = config.get("llm", {}).get("model", "gemini-2.5-flash")
+    if not gemini_key or "your_" in gemini_key:
+        print("[!] Google Gemini: API key not configured in .env")
+    else:
+        try:
+            c = genai.Client(api_key=gemini_key)
+            m = c.models.get(model=model_name)
+            print(f"[✓] Google Gemini: API key active & verified ({model_name})")
+        except Exception as e:
+            print(f"[!] Google Gemini: API key configured ({model_name})")
+
+    # 7. Library Audit (Syncthing conflicts, missing files, lyrics coverage)
+    conflict_count = 0
+    pattern = re.compile(r'^(.*?)\.sync-conflict-[^.]+(\.[a-zA-Z0-9]+)?$')
+    if os.path.exists(paths.base_dir):
+
+        for dirpath, _, filenames in os.walk(paths.base_dir):
+            for f in filenames:
+                if pattern.match(f):
+                    conflict_count += 1
+
+    if conflict_count > 0:
+        print(f"[-] Syncthing: {conflict_count} conflict files found (run engine to resolve)")
+    else:
+        print("[✓] Syncthing: No conflict files found")
+
+    if os.path.exists(db_path):
+        try:
+            with get_db_connection(db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT id, artist, title, file_path, track_number, release_date 
+                    FROM tracks 
+                    WHERE status IN ('CINTA', 'PERMANENT', 'ANTOJO') AND file_path IS NOT NULL
+                """)
+                active_tracks = cursor.fetchall()
+
+            missing_files = 0
+            unresolved_meta = 0
+            synced_lrc = 0
+            plain_lrc = 0
+            missing_lrc = 0
+
+            for t_id, t_artist, t_title, f_path, t_num, r_date in active_tracks:
+                if not f_path or not os.path.exists(f_path):
+                    missing_files += 1
+                    continue
+
+                if not t_num or not r_date:
+                    unresolved_meta += 1
+
+                lrc_path = os.path.splitext(f_path)[0] + ".lrc"
+                if os.path.exists(lrc_path):
+                    try:
+                        with open(lrc_path, 'r', encoding='utf-8', errors='ignore') as lf:
+                            content = lf.read()
+                            if re.search(r'\[\d{2}:\d{2}', content):
+                                synced_lrc += 1
+                            else:
+                                plain_lrc += 1
+                    except Exception:
+                        plain_lrc += 1
+                else:
+                    missing_lrc += 1
+
+            total_audited = synced_lrc + plain_lrc + missing_lrc
+            if total_audited > 0:
+                pct_synced = (synced_lrc / total_audited) * 100
+                pct_plain = (plain_lrc / total_audited) * 100
+                pct_missing = (missing_lrc / total_audited) * 100
+                print(f"[-] Lyrics Coverage: {pct_synced:.0f}% synced, {pct_plain:.0f}% plain, {pct_missing:.0f}% missing")
+
+            if missing_files > 0 or unresolved_meta > 0:
+                print(f"[-] Library Health: {missing_files} missing files on disk, {unresolved_meta} tracks missing track#/release_date")
+        except Exception as e:
+            print(f"[!] Library Health: Error scanning library ({e})")
+
+    print("="*51 + "\n")
+    return 0
+
+
+
 def main():
     parser = argparse.ArgumentParser(description="The Conveyor Belt - Autonomous Music Engine")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -122,7 +316,10 @@ def main():
     restore_p.add_argument("--target-base-dir", default=None, help="New base music directory if paths need to be rebased for this computer")
     restore_p.add_argument("--no-rebase", action="store_true", help="Do not rebase file paths inside tracks database")
 
+    subparsers.add_parser("doctor", help="Runs comprehensive health and diagnostic audit")
+
     args = parser.parse_args()
+
 
     db_path = "data/conveyor_state.sqlite"
     config_path = "config/config.yaml"
@@ -363,8 +560,11 @@ def main():
         if res.get('old_base') and res.get('new_base') and res['old_base'] != res['new_base']:
             print(f" - Base directory rebased:   '{res['old_base']}' -> '{res['new_base']}'")
         print("=======================================================\n")
+    elif args.command == "doctor":
+        sys.exit(run_doctor(db_path, config_path))
     else:
         parser.print_help()
+
 
 
 if __name__ == "__main__":

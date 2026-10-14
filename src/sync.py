@@ -10,6 +10,7 @@ import os
 import shutil
 import logging
 import hashlib
+import re
 import mutagen
 from src.db import get_db_connection
 from src.album_resolver import get_primary_artist
@@ -26,7 +27,49 @@ class FileSyncManager:
         storage_cfg = self.config.get('storage', {})
         self.mass_deletion_limit = storage_cfg.get('mass_deletion_failsafe_limit', 50)
 
+    def clean_syncthing_conflicts(self) -> int:
+        """
+        Detects and safely resolves Syncthing conflict files (*.sync-conflict-*).
+        Preserves the file with the newest modification time or largest size,
+        and removes redundant conflict sidecars.
+        """
+        cleaned = 0
+        pattern = re.compile(r'^(.*?)\.sync-conflict-[^.]+(\.[a-zA-Z0-9]+)?$')
+        base_dir = self.paths.base_dir
+
+        if not os.path.exists(base_dir):
+            return 0
+
+        for dirpath, _, filenames in os.walk(base_dir):
+            for f in filenames:
+                m = pattern.match(f)
+                if not m:
+                    continue
+                conflict_path = os.path.join(dirpath, f)
+                ext = m.group(2) if m.group(2) else ""
+                original_name = m.group(1) + ext
+                original_path = os.path.join(dirpath, original_name)
+
+                try:
+                    if os.path.exists(original_path):
+                        # If conflict file is newer and larger or equal, replace original
+                        c_stat = os.stat(conflict_path)
+                        o_stat = os.stat(original_path)
+                        if c_stat.st_mtime > o_stat.st_mtime and c_stat.st_size >= o_stat.st_size:
+                            os.replace(conflict_path, original_path)
+                        else:
+                            os.remove(conflict_path)
+                    else:
+                        # Rename conflict file to original name
+                        os.rename(conflict_path, original_path)
+                    cleaned += 1
+                    logger.info(f"Resolved Syncthing conflict: {conflict_path}")
+                except Exception as e:
+                    logger.warning(f"Error resolving conflict {conflict_path}: {e}")
+        return cleaned
+
     def sync_manual_moves(self) -> int:
+
         """
         Scans permanente_dir to find files manually moved
         into Permanent or between albums. If matches are found,

@@ -300,9 +300,11 @@ class MusicEngine:
         if self.config.get('playlists', {}).get('auto_update_on_change', True):
             self.playlists.check_and_update_if_modified()
 
-        # 2. Reverse physical synchronization (manual moves and ghost deletions)
+        # 2. Reverse physical synchronization (Syncthing conflicts, manual moves, and ghost deletions)
+        self.file_sync.clean_syncthing_conflicts()
         self.file_sync.sync_manual_moves()
         self.file_sync.clean_ghost_tracks()
+
 
         # 3. Telemetry and scrobbles
         processed_listens, _ = self.telemetry.process_listens()

@@ -266,8 +266,9 @@ Central orchestrator of the music lifecycle.
 - **Lifecycle execution flow (`run`):**
   1. **Release Radar:** Scans for recent releases from favorite artists.
   2. **Auto-Backup:** Generates SQLite backups in `data/backups/`.
-  3. **Reverse Sync:** Detects manual file moves to `Permanente` and updates database records.
+  3. **Syncthing Conflict & Reverse Sync:** Resolves Syncthing conflict files (`*.sync-conflict-*`), detects manual file moves to `Permanente`, and updates database records.
   4. **Ghost Cleaner:** Detects manual deletions from mobile/PC, immediately cleans associated `.lrc` sidecars, purges orphan `.lrc` files without audio, and marks tracks as `PURGED` (with a 50-file mass-deletion failsafe; covers `CINTA`, `PERMANENT`, and `ANTOJO`).
+
   5. **ListenBrainz Telemetry:** Downloads recent scrobbles and updates `play_count` and timestamps.
   6. **Heart Shielding ("Love"):** Tracks hearted on mobile immediately transition to `PERMANENT` and are moved to their official artist/album folder.
   7. **Requests Mailbox & Remote Commands (`peticiones.txt` / `requests.txt`):**
@@ -440,7 +441,11 @@ All commands are executed through `main.py` using the Python virtual environment
 
 # Restore a snapshot (.sqlite/.sqlite.gz) or migration bundle (.tar.gz) with automatic path rebasing
 .venv/bin/python main.py restore-backup <path/to/backup_file> [--target-base-dir /path/to/Music]
+
+# Run comprehensive system health and diagnostic audit
+.venv/bin/python main.py doctor
 ```
+
 
 ---
 
