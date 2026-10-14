@@ -1,5 +1,10 @@
 # ❓ Troubleshooting & Frequently Asked Questions (FAQ)
 
+<p align="right">
+  <b>Language / Idioma:</b>
+  <b>English</b> | <a href="../es/troubleshooting.md">Español</a>
+</p>
+
 <p align="center">
   <img src="https://img.shields.io/badge/guide-troubleshooting_&_faq-red?style=for-the-badge&logo=shield&logoColor=white" alt="Troubleshooting">
   <img src="https://img.shields.io/badge/status-solutions-green?style=for-the-badge" alt="Solutions">

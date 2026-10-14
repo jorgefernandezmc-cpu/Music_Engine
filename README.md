@@ -1,5 +1,10 @@
 # 🎵 Music Engine — The Autonomous Musical Conveyor Belt
 
+<p align="right">
+  <b>Language / Idioma:</b>
+  <b>English</b> | <a href="README.es.md">Español</a>
+</p>
+
 <p align="center">
   <img src="https://img.shields.io/badge/python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/database-SQLite_WAL-003B57?style=for-the-badge&logo=sqlite&logoColor=white" alt="SQLite WAL">
@@ -85,16 +90,16 @@ The full documentation is modularly organized in the [`docs/`](docs/) directory:
 
 | Guide | Description | Target Readers |
 | :--- | :--- | :--- |
-| 📦 **[Installation Guide](docs/installation.md)** | OS packages (`ffmpeg`, `python3-venv`), venv setup for Linux/macOS/WSL2. | *New users, Sysadmins* |
-| ⚙️ **[Configuration Guide](docs/configuration.md)** | Deep dive into `config.yaml`, `.env` tokens, taste profile & YouTube auth. | *All users* |
-| 💻 **[CLI Reference](docs/cli-reference.md)** | Exhaustive manual for all `main.py` commands, flags (`--fill`, etc.) and examples. | *Power users, Developers* |
-| 📱 **[Remote Mailbox Manual](docs/mailbox-commands.md)** | Full syntax for controlling the engine from mobile via `requests.txt` (EN & ES). | *Daily listeners* |
-| 📲 **[Mobile Ecosystem & Sync](docs/mobile-and-sync.md)** | Syncthing setup, `.stignore`, Lune/Auxio players, ListenBrainz & Pano Scrobbler. | *Android users* |
-| ⏰ **[Background Automation](docs/automation.md)** | Linux `systemd --user` service and timer setup, lingering, and automated logs. | *Sysadmins, Self-hosters* |
-| 🎶 **[Metadata, Genres & Lyrics](docs/metadata-and-lyrics.md)** | Synced `.lrc` cascade, Vorbis tags, Gemini genre classification & album repairs. | *Audiophiles* |
-| 💾 **[Backups & PC Migration](docs/backup-and-migration.md)** | Hot SQLite snapshots, SHA-256 deduplication, portable bundles & path rebasing. | *All users* |
-| ❓ **[Troubleshooting & FAQ](docs/troubleshooting.md)** | Diagnostic commands, common errors (locks, API keys, ffmpeg) and solutions. | *Anyone encountering issues* |
-| 🏗️ **[Architecture & Internals](docs/architecture.md)** | Deep technical guide: state machine, SQLite schema, module catalog & guidelines. | *Contributors, Developers* |
+| 📦 **[Installation Guide](docs/en/installation.md)** | OS packages (`ffmpeg`, `python3-venv`), venv setup for Linux/macOS/WSL2. | *New users, Sysadmins* |
+| ⚙️ **[Configuration Guide](docs/en/configuration.md)** | Deep dive into `config.yaml`, `.env` tokens, taste profile & YouTube auth. | *All users* |
+| 💻 **[CLI Reference](docs/en/cli-reference.md)** | Exhaustive manual for all `main.py` commands, flags (`--fill`, etc.) and examples. | *Power users, Developers* |
+| 📱 **[Remote Mailbox Manual](docs/en/mailbox-commands.md)** | Full syntax for controlling the engine from mobile via `requests.txt` (EN & ES). | *Daily listeners* |
+| 📲 **[Mobile Ecosystem & Sync](docs/en/mobile-and-sync.md)** | Syncthing setup, `.stignore`, Lune/Auxio players, ListenBrainz & Pano Scrobbler. | *Android users* |
+| ⏰ **[Background Automation](docs/en/automation.md)** | Linux `systemd --user` service and timer setup, lingering, and automated logs. | *Sysadmins, Self-hosters* |
+| 🎶 **[Metadata, Genres & Lyrics](docs/en/metadata-and-lyrics.md)** | Synced `.lrc` cascade, Vorbis tags, Gemini genre classification & album repairs. | *Audiophiles* |
+| 💾 **[Backups & PC Migration](docs/en/backup-and-migration.md)** | Hot SQLite snapshots, SHA-256 deduplication, portable bundles & path rebasing. | *All users* |
+| ❓ **[Troubleshooting & FAQ](docs/en/troubleshooting.md)** | Diagnostic commands, common errors (locks, API keys, ffmpeg) and solutions. | *Anyone encountering issues* |
+| 🏗️ **[Architecture & Internals](docs/en/architecture.md)** | Deep technical guide: state machine, SQLite schema, module catalog & guidelines. | *Contributors, Developers* |
 
 👉 **[Explore the Complete Documentation Index (docs/README.md)](docs/README.md)**
 
@@ -122,7 +127,7 @@ python main.py enrich-lyrics --all
 python main.py backup --tag "my_backup"
 ```
 
-*For complete command flags and usage recipes, see the **[CLI Reference](docs/cli-reference.md)**.*
+*For complete command flags and usage recipes, see the **[CLI Reference](docs/en/cli-reference.md)**.*
 
 ---
 
@@ -148,7 +153,7 @@ album: Track Title -> Correct Studio Album
 genre: Track Title -> Synthwave
 ```
 
-*Spanish keywords (`antojo:`, `disco:`, `favorita:`, `borrar:`, `genero:`) are fully supported interchangeably. See the **[Remote Mailbox Guide](docs/mailbox-commands.md)**.*
+*Spanish keywords (`antojo:`, `disco:`, `favorita:`, `borrar:`, `genero:`) are fully supported interchangeably. See the **[Remote Mailbox Guide](docs/en/mailbox-commands.md)**.*
 
 ---
 
@@ -199,5 +204,5 @@ genre: Track Title -> Synthwave
 
 <p align="center">
   <b>Music Engine</b> — Built for self-hosters and passionate music collectors.<br>
-  <a href="docs/README.md"><b>📖 Browse the Documentation Portal</b></a>
+  <a href="docs/README.md"><b>📖 Browse the Documentation Portal</b></a> • <a href="README.es.md"><b>🇪🇸 Leer en Español</b></a>
 </p>

@@ -1,11 +1,16 @@
 # 💻 CLI Command Reference
 
+<p align="right">
+  <b>Language / Idioma:</b>
+  <b>English</b> | <a href="../es/cli-reference.md">Español</a>
+</p>
+
 <p align="center">
   <img src="https://img.shields.io/badge/guide-cli_reference-brightgreen?style=for-the-badge&logo=gnubash&logoColor=white" alt="CLI Reference">
   <img src="https://img.shields.io/badge/interface-main.py-blue?style=for-the-badge" alt="Interface main.py">
 </p>
 
-All management, curation, enrichment, maintenance, and backup operations in **Music Engine** are executed through the single unified CLI entry point: [`main.py`](../main.py).
+All management, curation, enrichment, maintenance, and backup operations in **Music Engine** are executed through the single unified CLI entry point: [`main.py`](../../main.py).
 
 ---
 

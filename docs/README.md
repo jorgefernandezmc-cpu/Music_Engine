@@ -1,84 +1,83 @@
-# 📚 Music Engine Documentation Portal
+# 📚 Music Engine Documentation Portal / Portal de Documentación
 
 <p align="center">
-  <img src="https://img.shields.io/badge/docs-v2.0-blue?style=for-the-badge" alt="Documentation Version">
-  <img src="https://img.shields.io/badge/coverage-complete-brightgreen?style=for-the-badge" alt="Coverage Complete">
-  <img src="https://img.shields.io/badge/audience-all_users-orange?style=for-the-badge" alt="Audience All Users">
+  <img src="https://img.shields.io/badge/docs-multilingual-blue?style=for-the-badge" alt="Documentation Version">
+  <img src="https://img.shields.io/badge/languages-English%20%7C%20Español-brightgreen?style=for-the-badge" alt="Languages">
+  <img src="https://img.shields.io/badge/architecture-scalable_i18n-orange?style=for-the-badge" alt="Scalable i18n">
 </p>
 
-Welcome to the comprehensive documentation portal for **Music Engine** — the autonomous, self-hosted, and 100% private music management ecosystem.
-
-Whether you are setting up the system for the very first time, looking up CLI commands, integrating Android playback and scrobbling, or contributing code to the core engine, you will find targeted, detailed guides below.
+<p align="center">
+  <a href="en/README.md">🇬🇧 <b>English Documentation</b></a> &nbsp;&nbsp;•&nbsp;&nbsp;
+  <a href="es/README.md">🇪🇸 <b>Documentación en Español</b></a>
+</p>
 
 ---
 
-## 🗺️ Documentation Directory
+Welcome to the documentation portal for **Music Engine** — the autonomous, self-hosted, and 100% private music management ecosystem.
+
+Bienvenido al portal de documentación de **Music Engine** — el ecosistema de gestión musical autónomo, auto-alojado y 100% privado.
+
+---
+
+## 🗺️ Documentation Structure / Estructura de Documentación
+
+The documentation follows a clean, modular, and scalable multi-language hierarchy:
+
+La documentación sigue una jerarquía multilingüe limpia, modular y escalable:
 
 ```text
 docs/
-├── README.md               # 📍 You are here: Documentation index and navigational roadmap
-├── installation.md         # 📦 Prerequisites, OS packages (Linux/macOS/WSL2), venv & dependencies
-├── configuration.md        # ⚙️ config.yaml reference, .env secrets, taste profile & database init
-├── cli-reference.md        # 💻 Exhaustive CLI commands, arguments, flags and real-world examples
-├── mailbox-commands.md     # 📱 Remote control requests.txt / peticiones.txt syntax (EN & ES)
-├── mobile-and-sync.md      # 📲 Syncthing P2P sync, Lune & Android players, ListenBrainz telemetry
-├── automation.md           # ⏰ Background automation via systemd user services, timers & logging
-├── metadata-and-lyrics.md  # 🎶 Synced .lrc lyrics cascade, AI genre tagging & studio album repairs
-├── backup-and-migration.md # 💾 Hot SQLite snapshots, SHA-256 deduplication & PC migration bundles
-├── troubleshooting.md      # ❓ Comprehensive FAQ, common errors, diagnostics & recovery steps
-└── architecture.md         # 🏗️ Deep technical internals, SQLite data model & module catalog
+├── README.md               # 🌐 Multilingual index portal (You are here)
+├── en/                     # 🇬🇧 English Documentation
+│   ├── README.md           # English portal index & user pathways
+│   ├── installation.md     # Installation & prerequisites
+│   ├── configuration.md    # Configuration reference & environment secrets
+│   ├── cli-reference.md    # Complete CLI manual & options
+│   ├── mailbox-commands.md # Remote control requests.txt syntax
+│   ├── mobile-and-sync.md  # Syncthing, Android players & telemetry
+│   ├── automation.md       # Linux systemd background automation
+│   ├── metadata-and-lyrics.md # Synced lyrics (.lrc), tags & genres
+│   ├── backup-and-migration.md # SQLite snapshots & cross-PC migration
+│   ├── troubleshooting.md  # Troubleshooting & FAQ
+│   └── architecture.md     # Deep technical internals & data model
+└── es/                     # 🇪🇸 Documentación en Español
+    ├── README.md           # Índice del portal en español y rutas de usuario
+    ├── installation.md     # Instalación y requisitos previos
+    ├── configuration.md    # Referencia de configuración y secretos .env
+    ├── cli-reference.md    # Manual exhaustivo de CLI y opciones
+    ├── mailbox-commands.md # Sintaxis del buzón remoto peticiones.txt
+    ├── mobile-and-sync.md  # Syncthing, reproductores Android y telemetría
+    ├── automation.md       # Automatización en segundo plano con systemd
+    ├── metadata-and-lyrics.md # Letras sincronizadas (.lrc), etiquetas y géneros
+    ├── backup-and-migration.md # Instantáneas SQLite y migración entre PCs
+    ├── troubleshooting.md  # Solución de problemas y preguntas frecuentes
+    └── architecture.md     # Arquitectura interna técnica y modelo de datos
 ```
 
----
-
-## 🎯 Documentation by User Role
-
-Find the path that matches your current goal:
-
-| User Profile | Recommended Reading Path |
-| :--- | :--- |
-| **🚀 First-Time User** | 1. [Installation Guide](installation.md)<br>2. [Configuration Guide](configuration.md)<br>3. [Mobile Ecosystem & Sync](mobile-and-sync.md) |
-| **🎧 Daily Music Listener** | 1. [Remote Mailbox Commands](mailbox-commands.md)<br>2. [Mobile Ecosystem & Sync](mobile-and-sync.md)<br>3. [CLI Reference](cli-reference.md) |
-| **🛠️ Self-Hoster & Sysadmin** | 1. [Background Automation (Systemd)](automation.md)<br>2. [Backups & PC Migration](backup-and-migration.md)<br>3. [Troubleshooting & FAQ](troubleshooting.md) |
-| **🎵 Audiophile & Tag Curator** | 1. [Metadata, Genres & Lyrics](metadata-and-lyrics.md)<br>2. [Configuration Guide](configuration.md) (codecs, heuristics) |
-| **💻 Developer & Contributor** | 1. [System Architecture & Internals](architecture.md)<br>2. [CLI Reference](cli-reference.md)<br>3. [Root CONTEXT.md](../CONTEXT.md) |
+> [!TIP]
+> **Scalability for future languages:** To add a new language (e.g., French, German), contributors simply create a new directory (e.g., `docs/fr/`, `docs/de/`) containing matching filenames. The application code and commands remain exclusively in English.
 
 ---
 
-## 📑 Guides Overview
+## 📑 Complete Document Index / Índice Completo de Documentos
 
-### 1. 📦 [Installation Guide](installation.md)
-Step-by-step setup instructions for Debian, Ubuntu, Arch, Fedora, openSUSE, Alpine, macOS, and Windows WSL2. Covers system packages (`python3-venv`, `ffmpeg`), repository cloning, virtual environment configuration, and verification commands.
-
-### 2. ⚙️ [Configuration Guide](configuration.md)
-Complete line-by-line explanation of every setting in `config/config.yaml`: storage paths, Conveyor rotation limits, Gemini AI curation weights, downloader parameters, and backup policies. Details API credentials in `config/.env`, initial taste profile bootstrapping in `data/taste_profile.json`, database initialization, and optional YouTube cookies/headers.
-
-### 3. 💻 [CLI Reference](cli-reference.md)
-Full manual for `main.py` containing syntax, every command, all available arguments, flags (`--fill`, `--download`, `--force-all`, `--use-ai`, `--no-rebase`, etc.), and practical recipes for everyday maintenance.
-
-### 4. 📱 [Remote Mailbox Commands (`requests.txt`)](mailbox-commands.md)
-Learn how to control the engine from your phone by editing a simple synced text file. Covers English and Spanish syntax for single tracks, complete studio albums, temporary cravings, favorite promotions, genre reclassification, lyrics refresh, and purges.
-
-### 5. 📲 [Mobile Ecosystem & Sync](mobile-and-sync.md)
-How to create a seamless offline music experience: setting up bidirectional Syncthing with optimized `.stignore` rules, configuring offline-first players (**Lune**, **Auxio**, **Symfonium**, **VLC**), extracting custom user playlists, and tracking plays and hearts with **Pano Scrobbler** and **ListenBrainz**.
-
-### 6. ⏰ [Background Automation (Systemd)](automation.md)
-Automate Music Engine on Linux using non-privileged `systemd --user` units. Includes ready-to-use `.service` and `.timer` configurations, persistent wakeups, logging, and cronjob alternatives.
-
-### 7. 🎶 [Metadata, Genres & Lyrics](metadata-and-lyrics.md)
-Deep dive into the media enrichment pipeline: multi-source synced lyrics cascade (LRCLIB, syncedlyrics, YouTube Music, lyrics.ovh), embedded Vorbis/ID3 tags, AI genre categorization with Gemini and MusicBrainz, and studio album track repairs.
-
-### 8. 💾 [Backups, Snapshots & Migration](backup-and-migration.md)
-Learn how the engine protects your library state: hot zero-downtime SQLite snapshots using the WAL API, SHA-256 hash deduplication, single-file `.tar.gz` migration bundles, and restoring onto another machine with automatic path rebasing.
-
-### 9. ❓ [Troubleshooting & FAQ](troubleshooting.md)
-Solutions to common issues: missing API keys, `ffmpeg` audio extraction problems, SQLite WAL busy locks, YouTube rate-limiting or age restrictions, mobile scrobble sync delays, and accidental purges.
-
-### 10. 🏗️ [System Architecture & Internals](architecture.md)
-Comprehensive technical overview for developers: Conveyor lifecycle state machine, SQLite database schema with indices, audio storage directory hierarchy, and module catalog detailing every class in `src/`.
+| Topic / Tema | 🇬🇧 English | 🇪🇸 Español | Target Audience / Destinatarios |
+| :--- | :--- | :--- | :--- |
+| **Portal Index** | [English Portal](en/README.md) | [Portal en Español](es/README.md) | All users / Todos |
+| **📦 Installation** | [Installation Guide](en/installation.md) | [Guía de Instalación](es/installation.md) | New users, Sysadmins |
+| **⚙️ Configuration** | [Configuration Guide](en/configuration.md) | [Guía de Configuración](es/configuration.md) | All users / Todos |
+| **💻 CLI Reference** | [CLI Reference](en/cli-reference.md) | [Referencia de CLI](es/cli-reference.md) | Power users, Developers |
+| **📱 Remote Mailbox** | [Mailbox Commands](en/mailbox-commands.md) | [Comandos del Buzón Remoto](es/mailbox-commands.md) | Daily listeners / Móvil |
+| **📲 Mobile & Sync** | [Mobile Ecosystem & Sync](en/mobile-and-sync.md) | [Ecosistema Móvil y Sincronización](es/mobile-and-sync.md) | Android users / Móvil |
+| **⏰ Automation** | [Background Automation](en/automation.md) | [Automatización en Segundo Plano](es/automation.md) | Sysadmins, Self-hosters |
+| **🎶 Metadata & Lyrics** | [Metadata, Genres & Lyrics](en/metadata-and-lyrics.md) | [Metadatos, Géneros y Letras](es/metadata-and-lyrics.md) | Audiophiles / Curadores |
+| **💾 Backups & Migration** | [Backups & PC Migration](en/backup-and-migration.md) | [Copias de Seguridad y Migración](es/backup-and-migration.md) | All users / Todos |
+| **❓ Troubleshooting** | [Troubleshooting & FAQ](en/troubleshooting.md) | [Solución de Problemas y FAQ](es/troubleshooting.md) | Diagnostics / Ayuda |
+| **🏗️ Architecture** | [Architecture & Internals](en/architecture.md) | [Arquitectura e Internos](es/architecture.md) | Contributors, Developers |
 
 ---
 
 <p align="center">
-  <a href="../README.md"><b>⬅ Return to Project README</b></a> • <a href="installation.md"><b>Next: Installation Guide ➡</b></a>
+  <a href="../README.md"><b>⬅ English README</b></a> &nbsp;•&nbsp;
+  <a href="../README.es.md"><b>🇪🇸 README en Español</b></a>
 </p>

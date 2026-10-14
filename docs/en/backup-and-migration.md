@@ -1,12 +1,17 @@
 # 💾 Backups, Snapshots & PC Migration
 
+<p align="right">
+  <b>Language / Idioma:</b>
+  <b>English</b> | <a href="../es/backup-and-migration.md">Español</a>
+</p>
+
 <p align="center">
   <img src="https://img.shields.io/badge/backup-zero_downtime-brightgreen?style=for-the-badge&logo=sqlite&logoColor=white" alt="Zero Downtime Backup">
   <img src="https://img.shields.io/badge/deduplication-SHA--256-blue?style=for-the-badge" alt="SHA-256 Dedup">
   <img src="https://img.shields.io/badge/migration-one_command-orange?style=for-the-badge" alt="One Command Migration">
 </p>
 
-Music Engine features an intelligent, centralized backup and migration engine implemented in [`src/backup_manager.py`](../src/backup_manager.py). It ensures zero-downtime hot snapshots, automated retention rotation, SHA-256 hash deduplication, and seamless transfer of your library state to a new PC with automatic path rebasing.
+Music Engine features an intelligent, centralized backup and migration engine implemented in [`src/backup_manager.py`](../../src/backup_manager.py). It ensures zero-downtime hot snapshots, automated retention rotation, SHA-256 hash deduplication, and seamless transfer of your library state to a new PC with automatic path rebasing.
 
 ---
 

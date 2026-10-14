@@ -1,5 +1,10 @@
 # ⚙️ Configuration & Setup Guide
 
+<p align="right">
+  <b>Language / Idioma:</b>
+  <b>English</b> | <a href="../es/configuration.md">Español</a>
+</p>
+
 <p align="center">
   <img src="https://img.shields.io/badge/guide-configuration-orange?style=for-the-badge&logo=gear&logoColor=white" alt="Configuration Guide">
   <img src="https://img.shields.io/badge/format-YAML%20&%20ENV-blue?style=for-the-badge" alt="YAML and ENV">

@@ -1,5 +1,10 @@
 # ⏰ Background Automation (Systemd)
 
+<p align="right">
+  <b>Language / Idioma:</b>
+  <b>English</b> | <a href="../es/automation.md">Español</a>
+</p>
+
 <p align="center">
   <img src="https://img.shields.io/badge/service-systemd_user-teal?style=for-the-badge&logo=linux&logoColor=white" alt="Systemd User">
   <img src="https://img.shields.io/badge/automation-unattended-brightgreen?style=for-the-badge" alt="Unattended Automation">

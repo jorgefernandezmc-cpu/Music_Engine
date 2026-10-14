@@ -1,5 +1,10 @@
 # 🏗️ System Architecture & Codebase Internals
 
+<p align="right">
+  <b>Language / Idioma:</b>
+  <b>English</b> | <a href="../es/architecture.md">Español</a>
+</p>
+
 <p align="center">
   <img src="https://img.shields.io/badge/architecture-modular_python-blue?style=for-the-badge&logo=python&logoColor=white" alt="Modular Python">
   <img src="https://img.shields.io/badge/database-SQLite_WAL-003B57?style=for-the-badge&logo=sqlite&logoColor=white" alt="SQLite WAL">
@@ -114,7 +119,7 @@ Every track known to the engine transitions through a deterministic state machin
 
 ## 🗄️ SQLite Database Schema & Indices
 
-Located at `data/conveyor_state.sqlite`. Defined in [`database/schema.sql`](../database/schema.sql).
+Located at `data/conveyor_state.sqlite`. Defined in [`database/schema.sql`](../../database/schema.sql).
 
 ### `tracks` Table
 ```sql
@@ -225,26 +230,26 @@ Configured via `storage.base_dir` in `config/config.yaml`:
 
 ## 🧩 Module Catalog & Component Responsibilities
 
-All core Python modules reside in [`src/`](../src/):
+All core Python modules reside in [`src/`](../../src/):
 
 | Module | Primary Class / Functions | Key Responsibilities |
 | :--- | :--- | :--- |
-| [`src/paths.py`](../src/paths.py) | `StoragePaths` | Dynamic resolution of home paths (`~`), directory sanitization, English/Spanish folder aliases. |
-| [`src/db.py`](../src/db.py) | `get_db_connection` | Thread-safe connection pool with WAL mode (`PRAGMA journal_mode=WAL`), busy timeout (30s), cache sizing. |
-| [`src/album_resolver.py`](../src/album_resolver.py) | `resolve_album_track`, `get_primary_artist` | Semantic studio album resolution, heuristic scoring (+100 for albums), antagonistic keyword exclusion. |
-| [`src/downloader.py`](../src/downloader.py) | `Downloader` | Batch audio extraction via `yt-dlp`, Vorbis/MP4 tagging, artwork embedding, rate-limit sleep intervals. |
-| [`src/engine.py`](../src/engine.py) | `MusicEngine` | Central lifecycle orchestrator: runs radar, backups, sync, telemetry, purges, promotions, and downloads. |
-| [`src/curator_llm.py`](../src/curator_llm.py) | `CuratorLLM` | Gemini GenAI API prompts, listening profile analysis, YouTube Music radio recommendations. |
-| [`src/telemetry.py`](../src/telemetry.py) | `TelemetryEngine` | ListenBrainz API integration, fuzzy string matching (`thefuzz`) between remote scrobbles and local tracks. |
-| [`src/order_processor.py`](../src/order_processor.py) | `OrderProcessor` | Parsing natural language and regex commands from `requests.txt`, album moves, and purge requests. |
-| [`src/lyrics_provider.py`](../src/lyrics_provider.py) | `LyricsProvider` | Synchronized `.lrc` lyrics cascade: LRCLIB $\rightarrow$ syncedlyrics $\rightarrow$ YouTube Music $\rightarrow$ lyrics.ovh. |
-| [`src/genre_resolver.py`](../src/genre_resolver.py) | `resolve_genre`, `enrich_library_genres` | Granular genre classification using local SQLite cache, MusicBrainz API, and Gemini AI. |
-| [`src/enrich_track_meta.py`](../src/enrich_track_meta.py) | `enrich_library_metadata` | Ingests canonical track numbers and release dates into audio tags and database. |
-| [`src/playlist_gen.py`](../src/playlist_gen.py) | `PlaylistGenerator` | UTF-8 `.m3u8` playlist compilation, Lune JSON backup generation, and real-time directory watchdogs. |
-| [`src/backup_manager.py`](../src/backup_manager.py) | `BackupManager` | Hot SQLite snapshots, SHA-256 deduplication, single-file `.tar.gz` bundle exports, cross-PC path rebasing. |
-| [`src/sync.py`](../src/sync.py) | `FileSyncManager` | Detects manual file reorganizations, cleans orphaned `.lrc` sidecars, enforces mass-deletion failsafes. |
-| [`src/notifications.py`](../src/notifications.py) | `send_notification` | Non-blocking Linux desktop notifications via `notify-send` with graceful headless fallbacks. |
-| [`src/cli.py`](../src/cli.py) | `main` | Argument parsing and subcommands routing for `main.py`. |
+| [`src/paths.py`](../../src/paths.py) | `StoragePaths` | Dynamic resolution of home paths (`~`), directory sanitization, English/Spanish folder aliases. |
+| [`src/db.py`](../../src/db.py) | `get_db_connection` | Thread-safe connection pool with WAL mode (`PRAGMA journal_mode=WAL`), busy timeout (30s), cache sizing. |
+| [`src/album_resolver.py`](../../src/album_resolver.py) | `resolve_album_track`, `get_primary_artist` | Semantic studio album resolution, heuristic scoring (+100 for albums), antagonistic keyword exclusion. |
+| [`src/downloader.py`](../../src/downloader.py) | `Downloader` | Batch audio extraction via `yt-dlp`, Vorbis/MP4 tagging, artwork embedding, rate-limit sleep intervals. |
+| [`src/engine.py`](../../src/engine.py) | `MusicEngine` | Central lifecycle orchestrator: runs radar, backups, sync, telemetry, purges, promotions, and downloads. |
+| [`src/curator_llm.py`](../../src/curator_llm.py) | `CuratorLLM` | Gemini GenAI API prompts, listening profile analysis, YouTube Music radio recommendations. |
+| [`src/telemetry.py`](../../src/telemetry.py) | `TelemetryEngine` | ListenBrainz API integration, fuzzy string matching (`thefuzz`) between remote scrobbles and local tracks. |
+| [`src/order_processor.py`](../../src/order_processor.py) | `OrderProcessor` | Parsing natural language and regex commands from `requests.txt`, album moves, and purge requests. |
+| [`src/lyrics_provider.py`](../../src/lyrics_provider.py) | `LyricsProvider` | Synchronized `.lrc` lyrics cascade: LRCLIB $\rightarrow$ syncedlyrics $\rightarrow$ YouTube Music $\rightarrow$ lyrics.ovh. |
+| [`src/genre_resolver.py`](../../src/genre_resolver.py) | `resolve_genre`, `enrich_library_genres` | Granular genre classification using local SQLite cache, MusicBrainz API, and Gemini AI. |
+| [`src/enrich_track_meta.py`](../../src/enrich_track_meta.py) | `enrich_library_metadata` | Ingests canonical track numbers and release dates into audio tags and database. |
+| [`src/playlist_gen.py`](../../src/playlist_gen.py) | `PlaylistGenerator` | UTF-8 `.m3u8` playlist compilation, Lune JSON backup generation, and real-time directory watchdogs. |
+| [`src/backup_manager.py`](../../src/backup_manager.py) | `BackupManager` | Hot SQLite snapshots, SHA-256 deduplication, single-file `.tar.gz` bundle exports, cross-PC path rebasing. |
+| [`src/sync.py`](../../src/sync.py) | `FileSyncManager` | Detects manual file reorganizations, cleans orphaned `.lrc` sidecars, enforces mass-deletion failsafes. |
+| [`src/notifications.py`](../../src/notifications.py) | `send_notification` | Non-blocking Linux desktop notifications via `notify-send` with graceful headless fallbacks. |
+| [`src/cli.py`](../../src/cli.py) | `main` | Argument parsing and subcommands routing for `main.py`. |
 
 ---
 
@@ -260,7 +265,7 @@ Music Engine employs a multi-tiered safety model to prevent race conditions:
 
 ## 🤖 Developer & Contributor Directives
 
-All human contributors and AI coding assistants must adhere to the directives defined in [`CONTEXT.md`](../CONTEXT.md):
+All human contributors and AI coding assistants must adhere to the directives defined in [`CONTEXT.md`](../../CONTEXT.md):
 
 1. **English Only:** All code, variables, functions, docstrings, comments, log lines, and git commits must be written in clear English.
 2. **Data Privacy & Git Hygiene:** Never commit personal audio files, user databases (`*.sqlite`), backups (`data/backups/`), auth tokens (`.env`), or browser cookies (`cookies.txt`). Always update `.gitignore` when introducing new runtime state.

@@ -1,5 +1,10 @@
 # 📦 Step-by-Step Installation Guide
 
+<p align="right">
+  <b>Language / Idioma:</b>
+  <b>English</b> | <a href="../es/installation.md">Español</a>
+</p>
+
 <p align="center">
   <img src="https://img.shields.io/badge/guide-installation-blue?style=for-the-badge&logo=git&logoColor=white" alt="Installation Guide">
   <img src="https://img.shields.io/badge/python-3.10%20to%203.14-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.10 to 3.14">

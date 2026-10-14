@@ -1,5 +1,10 @@
 # 📲 Mobile Ecosystem & Synchronization
 
+<p align="right">
+  <b>Language / Idioma:</b>
+  <b>English</b> | <a href="../es/mobile-and-sync.md">Español</a>
+</p>
+
 <p align="center">
   <img src="https://img.shields.io/badge/integration-Android_&_Syncthing-16A085?style=for-the-badge&logo=syncthing&logoColor=white" alt="Syncthing">
   <img src="https://img.shields.io/badge/telemetry-ListenBrainz-EB743B?style=for-the-badge&logo=musicbrainz&logoColor=white" alt="ListenBrainz">

@@ -1,5 +1,10 @@
 # 🎶 Metadata, Genres & Synchronized Lyrics
 
+<p align="right">
+  <b>Language / Idioma:</b>
+  <b>English</b> | <a href="../es/metadata-and-lyrics.md">Español</a>
+</p>
+
 <p align="center">
   <img src="https://img.shields.io/badge/lyrics-synchronized_.lrc-blue?style=for-the-badge&logo=music&logoColor=white" alt="Synced Lyrics">
   <img src="https://img.shields.io/badge/genres-AI_%2B_MusicBrainz-orange?style=for-the-badge&logo=google&logoColor=white" alt="Genres AI MusicBrainz">
@@ -52,7 +57,7 @@ Music Engine maintains pristine audiophile standards. Rather than settling for l
 
 ## 1. Synchronized Lyrics Cascade
 
-Lyrics are retrieved using a multi-source fallback cascade implemented in [`src/lyrics_provider.py`](../src/lyrics_provider.py):
+Lyrics are retrieved using a multi-source fallback cascade implemented in [`src/lyrics_provider.py`](../../src/lyrics_provider.py):
 
 ### Provider Hierarchy
 
@@ -104,7 +109,7 @@ python main.py enrich-lyrics --no-upgrade
 
 ## 2. Intelligent Genre Classification
 
-Implemented in [`src/genre_resolver.py`](../src/genre_resolver.py).
+Implemented in [`src/genre_resolver.py`](../../src/genre_resolver.py).
 
 ### Multi-Tier Classification Strategy
 
@@ -144,7 +149,7 @@ python main.py enrich-genres --all --no-ai
 
 ## 3. Track Numbers & Release Dates
 
-Albums in the Permanent library are enriched with official disc track numbers and original release dates via [`src/enrich_track_meta.py`](../src/enrich_track_meta.py):
+Albums in the Permanent library are enriched with official disc track numbers and original release dates via [`src/enrich_track_meta.py`](../../src/enrich_track_meta.py):
 
 - Fetches canonical track sequencing directly from YouTube Music album manifests.
 - Tags audio files with `tracknumber` and `date` / `year`.
@@ -162,7 +167,7 @@ python main.py enrich-metadata --force-all
 
 ## 4. Heuristic Studio Album Resolution
 
-Implemented in [`src/album_resolver.py`](../src/album_resolver.py).
+Implemented in [`src/album_resolver.py`](../../src/album_resolver.py).
 
 ### Prioritizing Studio Albums over Singles
 

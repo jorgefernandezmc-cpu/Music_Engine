@@ -79,21 +79,36 @@ The `Music_Engine` repository is structured modularly:
 Music_Engine/
 ├── main.py                     # Clean entry point delegating to src.cli
 ├── requirements.txt            # Python dependencies
-├── README.md                   # Clean visual landing and documentation roadmap
+├── README.md                   # Clean visual landing and documentation roadmap (English)
+├── README.es.md                # Full Spanish translation of README
 ├── CONTEXT.md                  # This canonical architecture reference
 │
-├── docs/                       # Modular documentation portal
-│   ├── README.md               # Documentation directory index and role navigation
-│   ├── installation.md         # Prerequisites, OS packages (Linux/macOS/WSL2), venv & dependencies
-│   ├── configuration.md        # config.yaml reference, .env secrets, taste profile & DB init
-│   ├── cli-reference.md        # Full CLI manual for all main.py commands and options
-│   ├── mailbox-commands.md     # Remote mailbox requests.txt / peticiones.txt manual (EN & ES)
-│   ├── mobile-and-sync.md      # Syncthing P2P sync, Lune & Android players, ListenBrainz telemetry
-│   ├── automation.md           # Systemd user services, timers, background execution & logs
-│   ├── metadata-and-lyrics.md  # Synced .lrc cascade, Vorbis/ID3 tags, AI genres & studio repair
-│   ├── backup-and-migration.md # Hot SQLite snapshots, SHA-256 deduplication & PC migration bundles
-│   ├── troubleshooting.md      # Diagnostic commands, FAQ and troubleshooting solutions
-│   └── architecture.md         # Deep technical internals, SQLite schema, state machine & modules
+├── docs/                       # Modular multilingual documentation portal
+│   ├── README.md               # Multilingual portal gateway and directory map
+│   ├── en/                     # English documentation portal & guides
+│   │   ├── README.md
+│   │   ├── installation.md
+│   │   ├── configuration.md
+│   │   ├── cli-reference.md
+│   │   ├── mailbox-commands.md
+│   │   ├── mobile-and-sync.md
+│   │   ├── automation.md
+│   │   ├── metadata-and-lyrics.md
+│   │   ├── backup-and-migration.md
+│   │   ├── troubleshooting.md
+│   │   └── architecture.md
+│   └── es/                     # Spanish documentation portal & guides
+│       ├── README.md
+│       ├── installation.md
+│       ├── configuration.md
+│       ├── cli-reference.md
+│       ├── mailbox-commands.md
+│       ├── mobile-and-sync.md
+│       ├── automation.md
+│       ├── metadata-and-lyrics.md
+│       ├── backup-and-migration.md
+│       ├── troubleshooting.md
+│       └── architecture.md
 │
 ├── config/                     # Configuration files and local credentials
 │   ├── config.yaml.template    # Base configuration template

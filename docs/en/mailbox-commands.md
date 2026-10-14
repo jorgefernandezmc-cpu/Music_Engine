@@ -1,5 +1,10 @@
 # 📱 Remote Control Mailbox (`requests.txt` / `peticiones.txt`)
 
+<p align="right">
+  <b>Language / Idioma:</b>
+  <b>English</b> | <a href="../es/mailbox-commands.md">Español</a>
+</p>
+
 <p align="center">
   <img src="https://img.shields.io/badge/feature-remote_mailbox-purple?style=for-the-badge&logo=fastapi&logoColor=white" alt="Remote Mailbox">
   <img src="https://img.shields.io/badge/bilingual-English%20&%20Spanish-orange?style=for-the-badge" alt="Bilingual">
