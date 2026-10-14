@@ -303,8 +303,8 @@ Central orchestrator of the music lifecycle.
      - **Feedback Loop:** Successfully processed commands are cleared from the file; info results and failed commands are retained with formatted comments.
   8. **Strict Duplicate Prevention in Conveyor:** Conveyor never downloads tracks already in `Permanente` (both by YouTube ID and normalized title/artist match).
   9. **Cravings Retention & Auto-Purge (`_purge_cravings`):** Tracks in Cravings (`ANTOJO` status) are automatically purged after exceeding configured `cravings.retention_days` (default 30 days without play), removing physical audio files, `.lrc` sidecars, empty directories, and updating status to `PURGED`.
-  10. **Automatic Promotion:** Tracks with sufficient plays (>=15) are promoted from Conveyor to `Permanente`.
-  11. **Guillotine Purge:** Unplayed Conveyor tracks past the grace period or with high skip ratios are physically deleted and marked `PURGED`.
+  10. **Dynamic Affinity Scoring & Promotion (`compute_affinity_score`):** Tracks on the Conveyor are evaluated on each cycle using a continuous affinity score ($0.0 \dots 100.0$) factoring in base points (50.0), completed plays (+4 each, max +40), recent listen velocity within 14 days (+5 each, max +20), skip penalties (mitigated by established play count), and idle decay (>45 days). Promotes tracks to `Permanent` when `affinity_score >= 85.0` or `play_count >= 15`.
+  11. **Intelligent Purge with Discovery Immunity Shield:** Protects newly downloaded tracks for their first 14 days (`added_at <= 14 days`) with a minimum score floor (45.0) against premature deletion from accidental shuffle skips. Purges unplayed/skipped tracks only after day 14 if `affinity_score <= 15.0` or idle days exceed `grace_period_days` (150 days). Falls back gracefully to legacy binary counts if `conveyor.smart_scoring: false`.
   12. **Progressive Buffer Replenishment:**
       - In periodic automated cycles: moderate curation (up to 20 tracks) and limited batch downloads (up to 50 tracks) to avoid bandwidth saturation or rate limits.
       - In full manual mode (`--fill`): fills all open slots up to maximum buffer capacity (750 tracks).

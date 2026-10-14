@@ -59,6 +59,13 @@ def ensure_db_indexes(conn: sqlite3.Connection) -> None:
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_tracks_file_path ON tracks(file_path);")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_tracks_artist_title ON tracks(artist, title);")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_tracks_play_count ON tracks(play_count);")
+
+    # Ensure affinity_score column exists in tracks table
+    cursor.execute("PRAGMA table_info(tracks);")
+    columns = [row[1] for row in cursor.fetchall()]
+    if columns and "affinity_score" not in columns:
+        cursor.execute("ALTER TABLE tracks ADD COLUMN affinity_score REAL DEFAULT 50.0;")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tracks_affinity ON tracks(affinity_score);")
     
     # Indices on listen_events
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_listen_events_track_id ON listen_events(track_id);")

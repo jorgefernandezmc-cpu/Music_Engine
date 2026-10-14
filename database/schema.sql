@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS tracks (
     file_path TEXT,
     genre TEXT,
     track_number INTEGER,
-    release_date TEXT
+    release_date TEXT,
+    affinity_score REAL DEFAULT 50.0
 );
 
 CREATE TABLE IF NOT EXISTS listen_events (
@@ -50,6 +51,7 @@ CREATE INDEX IF NOT EXISTS idx_tracks_status_perm ON tracks(status, is_permanent
 CREATE INDEX IF NOT EXISTS idx_tracks_file_path ON tracks(file_path);
 CREATE INDEX IF NOT EXISTS idx_tracks_artist_title ON tracks(artist, title);
 CREATE INDEX IF NOT EXISTS idx_tracks_play_count ON tracks(play_count);
+CREATE INDEX IF NOT EXISTS idx_tracks_affinity ON tracks(affinity_score);
 
 CREATE INDEX IF NOT EXISTS idx_listen_events_track_id ON listen_events(track_id);
 CREATE INDEX IF NOT EXISTS idx_listen_events_listened_at ON listen_events(listened_at);

@@ -52,6 +52,12 @@ conveyor:
   # Number of tracks to request from the Curator in each normal cycle:
   curation_batch_per_cycle: 20
 
+  # Dynamic Affinity Scoring for intelligent lifecycle management:
+  smart_scoring: true
+  promotion_affinity: 85.0
+  purge_affinity: 15.0
+  discovery_immunity_days: 14
+
 # ------------------------------------------------------------------------------
 # 3. INTELLIGENT CURATOR (LLM / GEMINI)
 # ------------------------------------------------------------------------------

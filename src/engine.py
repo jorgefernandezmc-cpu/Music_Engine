@@ -13,7 +13,7 @@ from datetime import datetime
 from filelock import FileLock, Timeout
 
 from src.paths import StoragePaths
-from src.db import get_db_connection
+from src.db import get_db_connection, ensure_db_indexes
 from src.album_resolver import get_primary_artist
 from src.telemetry import TelemetryEngine
 from src.curator_llm import CuratorLLM, TrackRecommendation
@@ -31,6 +31,50 @@ if not logger.handlers:
     fh.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
     logger.addHandler(fh)
     logger.setLevel(logging.INFO)
+
+
+def compute_affinity_score(
+    track: dict,
+    recent_listens_count: int = 0,
+    days_since_added: float = 999.0,
+    days_since_last_play: float = 999.0
+) -> float:
+    """
+    Computes real-time affinity score (0.0 - 100.0) for conveyor tracks.
+    Takes into account:
+    - Base score (50.0)
+    - Completed plays bonus (up to +40.0)
+    - Recent velocity bonus within last 14 days (up to +20.0)
+    - Skip penalty attenuated by play count
+    - Decay penalty for tracks idle > 45 days
+    - Discovery immunity shield for new tracks (first 14 days)
+    """
+    play_count = track.get('play_count', 0) or 0
+    skip_count = track.get('skip_count', 0) or 0
+
+    # 1. Base Score
+    score = 50.0
+
+    # 2. Completed Plays Bonus (up to +40)
+    score += min(play_count * 4.0, 40.0)
+
+    # 3. Recent Velocity Bonus (listens within last 14 days)
+    score += min(recent_listens_count * 5.0, 20.0)
+
+    # 4. Skip Penalty (attenuated if play_count is already high)
+    skip_mitigation = max(0.2, 1.0 - (play_count * 0.05))
+    score -= (skip_count * 8.0 * skip_mitigation)
+
+    # 5. Decay penalty for idle tracks without listens
+    if days_since_last_play > 45:
+        decay_days = days_since_last_play - 45
+        score -= min(decay_days * 0.4, 35.0)
+
+    # 6. Discovery Immunity Shield for new tracks (first 14 days)
+    if days_since_added <= 14:
+        score = max(score, 45.0)
+
+    return max(0.0, min(100.0, round(score, 1)))
 
 
 class MusicEngine:
@@ -404,19 +448,78 @@ class MusicEngine:
         # 6. Process requests mailbox and remote commands
         self.order_processor.process_peticiones()
 
-        # 7. Lifecycle: Promotion and Purging on Conveyor
+        # 7. Lifecycle: Dynamic Affinity Scoring, Promotion and Purging on Conveyor
         is_fresh = self.telemetry.is_telemetry_fresh()
+
+        smart_scoring_enabled = bool(self.conveyor_config.get('smart_scoring', True))
+        promo_affinity = float(self.conveyor_config.get('promotion_affinity', 85.0))
+        purge_affinity = float(self.conveyor_config.get('purge_affinity', 15.0))
+        immunity_days = float(self.conveyor_config.get('discovery_immunity_days', 14))
+        promo_count = int(self.conveyor_config.get('promotion_play_count', 15))
+        grace_days = float(self.conveyor_config.get('grace_period_days', 150))
 
         with get_db_connection(self.db_path) as conn:
             cursor = conn.cursor()
 
-            # --- PROMOTION VIA PLAY COUNT TO PERMANENT ---
-            promo_count = self.conveyor_config.get('promotion_play_count', 15)
-            cursor.execute("SELECT id, file_path, artist, album, title FROM tracks WHERE status = 'CINTA' AND play_count >= ?", (promo_count,))
-            to_promote = cursor.fetchall()
+            # Ensure indexes & affinity_score column exist
+            ensure_db_indexes(conn)
+
+            # Query all active conveyor tracks with metadata and day counts
+            cursor.execute("""
+                SELECT id, file_path, artist, album, title, play_count, skip_count,
+                       (julianday('now') - julianday(added_at)) AS days_since_added,
+                       (julianday('now') - julianday(COALESCE(last_played_at, added_at))) AS days_since_last_play
+                FROM tracks
+                WHERE status = 'CINTA'
+            """)
+            conveyor_tracks = cursor.fetchall()
+
+            # Query recent velocity (listens within last 14 days)
+            cursor.execute("""
+                SELECT track_id, COUNT(*)
+                FROM listen_events
+                WHERE listened_at >= datetime('now', '-14 days')
+                GROUP BY track_id
+            """)
+            recent_counts = dict(cursor.fetchall())
+
+            # Calculate and update affinity scores
+            track_affinities = {}
+            score_updates = []
+            for t_id, f_path, p_artist, p_album, p_title, t_play, t_skip, d_added, d_last_play in conveyor_tracks:
+                days_added = float(d_added) if d_added is not None else 999.0
+                days_unplayed = float(d_last_play) if d_last_play is not None else days_added
+                rec_listens = recent_counts.get(t_id, 0)
+                track_dict = {'play_count': t_play or 0, 'skip_count': t_skip or 0}
+                score = compute_affinity_score(track_dict, rec_listens, days_added, days_unplayed)
+                track_affinities[t_id] = score
+                score_updates.append((score, t_id))
+
+            if score_updates:
+                cursor.executemany("UPDATE tracks SET affinity_score = ? WHERE id = ?", score_updates)
+                conn.commit()
+
+            # --- PROMOTION PHASE ---
+            to_promote = []
+            for row in conveyor_tracks:
+                t_id = row[0]
+                t_play = row[5] or 0
+                affinity = track_affinities.get(t_id, 50.0)
+
+                should_promote = False
+                if smart_scoring_enabled:
+                    if affinity >= promo_affinity or t_play >= promo_count:
+                        should_promote = True
+                else:
+                    if t_play >= promo_count:
+                        should_promote = True
+
+                if should_promote:
+                    to_promote.append(row)
+
             promoted_count = len(to_promote)
 
-            for t_id, f_path, p_artist, p_album, p_title in to_promote:
+            for t_id, f_path, p_artist, p_album, p_title, t_play, t_skip, d_added, d_last_play in to_promote:
                 primary_artist = get_primary_artist(p_artist)
                 new_path = self.paths.get_permanente_track_path(primary_artist, p_album, p_title)
                 os.makedirs(os.path.dirname(new_path), exist_ok=True)
@@ -434,33 +537,46 @@ class MusicEngine:
                         SET status = 'PERMANENT', is_permanent = 1, file_path = ?
                         WHERE id = ?
                     """, (new_path, t_id))
-                    logger.info(f"Promoted {t_id} to {new_path}")
+                    logger.info(f"Promoted {t_id} ({p_artist} - {p_title}) to {new_path} (Affinity: {track_affinities.get(t_id, 0.0)}, Plays: {t_play})")
                 except Exception as e:
                     logger.error(f"Failed promoting {t_id}: {e}")
 
-            # --- CONVEYOR PURGE ---
+            # --- CONVEYOR PURGE PHASE ---
             if not is_fresh:
                 logger.warning("Outdated telemetry. Skipping purge phase for safety.")
             else:
-                grace_days = self.conveyor_config.get('grace_period_days', 150)
-                cursor.execute(f"""
-                    SELECT id, file_path FROM tracks 
-                    WHERE status = 'CINTA' 
-                    AND (julianday('now') - julianday(COALESCE(last_played_at, added_at))) > ?
-                """, (grace_days,))
-                to_purge_time = cursor.fetchall()
+                to_purge = []
+                promoted_ids = {r[0] for r in to_promote}
+                active_remaining = [r for r in conveyor_tracks if r[0] not in promoted_ids]
 
-                cursor.execute(f"""
-                    SELECT id, file_path FROM tracks
-                    WHERE status = 'CINTA'
-                    AND (
-                        skip_count >= ?
-                        OR (skip_count >= 3 AND (CAST(skip_count AS REAL) / (play_count + skip_count)) >= ?)
-                    )
-                """, (self.max_skips_before_purge, self.max_skip_ratio))
-                to_purge_skip = cursor.fetchall()
+                for row in active_remaining:
+                    t_id = row[0]
+                    f_path = row[1]
+                    t_play = row[5] or 0
+                    t_skip = row[6] or 0
+                    d_added = float(row[7]) if row[7] is not None else 999.0
+                    d_last_play = float(row[8]) if row[8] is not None else d_added
+                    affinity = track_affinities.get(t_id, 50.0)
 
-                to_purge = list(set(to_purge_time + to_purge_skip))
+                    should_purge = False
+                    if smart_scoring_enabled:
+                        # Smart Purge: Discovery immunity shield (first 14 days) protects new tracks.
+                        # Purge only when older than immunity days AND (affinity <= purge_affinity OR days idle > grace_days)
+                        if d_added > immunity_days:
+                            if affinity <= purge_affinity or d_last_play > grace_days:
+                                should_purge = True
+                    else:
+                        # Legacy binary count rules
+                        if d_last_play > grace_days:
+                            should_purge = True
+                        elif t_skip >= self.max_skips_before_purge:
+                            should_purge = True
+                        elif t_skip >= 3 and (float(t_skip) / (t_play + t_skip)) >= self.max_skip_ratio:
+                            should_purge = True
+
+                    if should_purge:
+                        to_purge.append((t_id, f_path))
+
                 purged_count = len(to_purge)
 
                 for t_id, f_path in to_purge:
@@ -479,7 +595,7 @@ class MusicEngine:
                                         pass
 
                         cursor.execute("UPDATE tracks SET status = 'PURGED' WHERE id = ?", (t_id,))
-                        logger.info(f"Purged track {t_id} ({f_path}) from Conveyor to PURGED status")
+                        logger.info(f"Purged track {t_id} ({f_path}) from Conveyor to PURGED status (Affinity: {track_affinities.get(t_id, 0.0)})")
                     except Exception as e:
                         logger.error(f"Failed purging {t_id}: {e}")
 

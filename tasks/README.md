@@ -29,7 +29,7 @@ Before implementing any task, review the project rules defined in `CONTEXT.md`:
 | **P2** | **TASK-05** | **System Health Audit (`doctor` command) & Syncthing Cleaner** | `src/cli.py`, `src/sync.py`, `src/engine.py` | ✅ Completed | [`05_SYNCTHING_CONFLICTS_AND_HEALTH_DOCTOR.md`](05_SYNCTHING_CONFLICTS_AND_HEALTH_DOCTOR.md) |
 
 | **P3** | **TASK-06** | **Audio Loudness Normalization (ReplayGain / EBU R128)** | `src/downloader.py`, `config/config.yaml.template` | ✅ Completed | [`06_REPLAYGAIN_LOUDNESS_NORMALIZATION.md`](06_REPLAYGAIN_LOUDNESS_NORMALIZATION.md) |
-| **P3** | **TASK-07** | **Dynamic Affinity Scoring for Conveyor Lifecycle** | `src/engine.py`, `database/schema.sql` | ⏳ Ready | [`07_SMART_CONVEYOR_SCORING.md`](07_SMART_CONVEYOR_SCORING.md) |
+| **P3** | **TASK-07** | **Dynamic Affinity Scoring for Conveyor Lifecycle** | `src/engine.py`, `database/schema.sql` | ✅ Completed | [`07_SMART_CONVEYOR_SCORING.md`](07_SMART_CONVEYOR_SCORING.md) |
 
 ---
 
