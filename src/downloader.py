@@ -12,6 +12,7 @@ from mutagen.oggopus import OggOpus
 from mutagen.flac import Picture
 from mutagen.mp4 import MP4, MP4Cover
 
+from src.paths import StoragePaths
 from src.album_resolver import get_primary_artist
 from src.lyrics_provider import get_lyrics, send_grouped_lyrics_notification
 from src.genre_resolver import resolve_genre
@@ -29,6 +30,8 @@ if not logger.handlers:
 class Downloader:
     def __init__(self, db_path: str, config_path: str = "config/config.yaml"):
         self.db_path = db_path
+        self.config_path = config_path
+        self.paths = StoragePaths(config_path)
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
             
@@ -116,7 +119,7 @@ class Downloader:
                 if download_success:
                     if is_perm:
                         new_status = 'PERMANENT'
-                    elif hasattr(self.paths, 'cravings_dir') and self.paths.cravings_dir and (self.paths.cravings_dir in f_path):
+                    elif getattr(self.paths, 'cravings_dir', None) and (self.paths.cravings_dir in f_path):
                         new_status = 'ANTOJO'
                     else:
                         new_status = 'CINTA'

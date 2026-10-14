@@ -12,6 +12,7 @@ import logging
 import hashlib
 import mutagen
 from src.db import get_db_connection
+from src.album_resolver import get_primary_artist
 
 logger = logging.getLogger('sync')
 
@@ -195,44 +196,47 @@ class FileSyncManager:
         - Rating 1: Purge track immediately.
         - Rating 4 or 5: Promote immediately to Permanent.
         """
-        for dirpath, _, filenames in os.walk(self.paths.base_dir):
-            for f in filenames:
-                if not f.endswith(('.opus', '.mp3', '.flac', '.m4a')):
-                    continue
-                    
-                filepath = os.path.join(dirpath, f)
-                
-                try:
-                    audio = mutagen.File(filepath)
-                    if not audio: 
-                        continue
-                    
-                    rating = 0
-                    
-                    # Opus / FLAC (Vorbis comments)
-                    if 'RATING' in audio:
-                        try:
-                            val = int(audio['RATING'][0])
-                            rating = val if val <= 5 else int(val / 20)
-                        except Exception: 
-                            pass
-                    
-                    # MP3 (ID3 POPM)
-                    elif hasattr(audio, 'tags') and audio.tags:
-                        for tag in audio.tags.values():
-                            if getattr(tag, 'FrameID', None) == 'POPM':
-                                val = tag.rating
-                                if val >= 196: rating = 5
-                                elif val >= 128: rating = 4
-                                elif val >= 64: rating = 3
-                                elif val >= 1: rating = 1
-                                break
+        if not os.path.exists(self.paths.base_dir):
+            return
 
-                    if rating == 0:
+        with get_db_connection(self.db_path) as conn:
+            cursor = conn.cursor()
+            for dirpath, _, filenames in os.walk(self.paths.base_dir):
+                for f in filenames:
+                    if not f.endswith(('.opus', '.mp3', '.flac', '.m4a')):
                         continue
+                        
+                    filepath = os.path.join(dirpath, f)
+                    
+                    try:
+                        audio = mutagen.File(filepath)
+                        if not audio: 
+                            continue
+                        
+                        rating = 0
+                        
+                        # Opus / FLAC (Vorbis comments)
+                        if 'RATING' in audio:
+                            try:
+                                val = int(audio['RATING'][0])
+                                rating = val if val <= 5 else int(val / 20)
+                            except Exception: 
+                                pass
+                        
+                        # MP3 (ID3 POPM)
+                        elif hasattr(audio, 'tags') and audio.tags:
+                            for tag in audio.tags.values():
+                                if getattr(tag, 'FrameID', None) == 'POPM':
+                                    val = tag.rating
+                                    if val >= 196: rating = 5
+                                    elif val >= 128: rating = 4
+                                    elif val >= 64: rating = 3
+                                    elif val >= 1: rating = 1
+                                    break
 
-                    with get_db_connection(self.db_path) as conn:
-                        cursor = conn.cursor()
+                        if rating == 0:
+                            continue
+
                         cursor.execute("SELECT id, status, is_permanent, artist, album, title FROM tracks WHERE file_path = ?", (filepath,))
                         row = cursor.fetchone()
                         
@@ -242,27 +246,54 @@ class FileSyncManager:
                         
                         if rating == 1:
                             audio.delete()
-                            try: os.remove(filepath)
-                            except Exception: pass
+                            try: 
+                                os.remove(filepath)
+                            except Exception: 
+                                pass
                             lrc_p = os.path.splitext(filepath)[0] + ".lrc"
                             if os.path.exists(lrc_p):
-                                try: os.remove(lrc_p)
-                                except Exception: pass
+                                try: 
+                                    os.remove(lrc_p)
+                                except Exception: 
+                                    pass
                             new_status = 'PURGED'
                             cursor.execute("UPDATE tracks SET status = ?, file_path = NULL WHERE id = ?", (new_status, t_id))
+                            conn.commit()
                             logger.info(f"Rating 1: Purged {filepath} and associated lyrics.")
                             
                         elif rating in (4, 5):
-                            new_path = self.paths.get_permanente_track_path(t_artist, t_album, t_title)
+                            primary_art = get_primary_artist(t_artist)
+                            clean_alb = t_album if t_album else "Singles"
+                            ext = os.path.splitext(filepath)[1]
+                            new_path = self.paths.get_permanente_track_path(primary_art, clean_alb, t_title, ext=ext)
                             if filepath != new_path:
                                 os.makedirs(os.path.dirname(new_path), exist_ok=True)
                                 if 'RATING' in audio: 
                                     del audio['RATING']
                                 audio.save()
                                 shutil.move(filepath, new_path)
+                                
+                                # Move companion .lrc sidecar file if present
+                                old_lrc = os.path.splitext(filepath)[0] + ".lrc"
+                                new_lrc = os.path.splitext(new_path)[0] + ".lrc"
+                                if os.path.exists(old_lrc):
+                                    shutil.move(old_lrc, new_lrc)
+
+                                # Clean up old empty directory if needed
+                                old_dir = os.path.dirname(filepath)
+                                try:
+                                    if os.path.exists(old_dir) and not os.listdir(old_dir):
+                                        os.rmdir(old_dir)
+                                        parent_old = os.path.dirname(old_dir)
+                                        if parent_old and os.path.exists(parent_old) and not os.listdir(parent_old) and parent_old != self.paths.cravings_dir and parent_old != self.paths.conveyor_dir:
+                                            os.rmdir(parent_old)
+                                except Exception:
+                                    pass
+
                                 cursor.execute("UPDATE tracks SET status = 'PERMANENT', is_permanent = 1, file_path = ? WHERE id = ?", (new_path, t_id))
+                                conn.commit()
                                 logger.info(f"Rating {rating}: Moved to Permanent -> {new_path}")
                                 
-                except Exception as e:
-                    logger.debug(f"Error processing rating for {filepath}: {e}")
-                    continue
+                    except Exception as e:
+                        logger.debug(f"Error processing rating for {filepath}: {e}")
+                        continue
