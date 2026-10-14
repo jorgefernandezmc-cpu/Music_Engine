@@ -309,6 +309,12 @@ Central orchestrator of the music lifecycle.
 ### 5.6. `src/curator_llm.py` (`CuratorLLM`)
 - Integrates Google GenAI SDK (Gemini) to evaluate track recommendations based on taste profile (`data/taste_profile.json`).
 - Extracts candidate tracks from YouTube Music radios and filters out known or redundant songs.
+- **Local Radio Generator (`generate_local_radio`):**
+  - Generates themed playlists based on descriptive vibes (`vibra`) triggered via mailbox orders (`radio: <vibe>`).
+  - **Scalable Candidate Pre-Selection:** Limits LLM prompt candidates to at most 130 tracks (top 100 affinity scored by genre, title, artist, and play count + 30 discovery samples) to prevent token exhaustion and latency in large collections (>120 tracks).
+  - **Enriched Genre Context:** Supplies `[Genre: <genre>]` tags in the prompt to allow informed DJ selections.
+  - **Standardized M3U8 Export:** Writes `Radio_<Vibe>.m3u8` with `#EXTINF:<duration>` directives and relative paths compatible with mobile players (Lune, Symfonium, VLC).
+
 
 ### 5.7. `src/playlist_gen.py` (`PlaylistGenerator`)
 Generates playlists with a dual strategy (universal M3U8 + native Lune JSON backup) and reactive directory and file modification detection:

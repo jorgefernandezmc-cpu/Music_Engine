@@ -3,6 +3,7 @@ import logging
 import math
 import yaml
 import re
+import random
 from pydantic import BaseModel, Field
 from google import genai
 from google.genai import types
@@ -435,34 +436,109 @@ class CuratorLLM:
                 
         return final_groups
 
+    def _select_radio_candidates(self, tracks: list[dict], vibra: str) -> list[dict]:
+        """
+        Pre-selects at most 130 candidate tracks from the library based on genre,
+        artist, title affinity, and play count to prevent LLM token exhaustion.
+        """
+        if len(tracks) <= 120:
+            return tracks
+
+        # Tokenize vibra into search tokens (words with >= 3 characters)
+        tokens = [t.lower() for t in re.findall(r'[\w]+', vibra) if len(t) >= 3]
+        if not tokens:
+            tokens = [t.lower() for t in re.findall(r'[\w]+', vibra)]
+
+        scored_tracks = []
+        for t in tracks:
+            score = 0
+            g_lower = (t.get('genre') or '').lower()
+            a_lower = (t.get('artist') or '').lower()
+            ti_lower = (t.get('title') or '').lower()
+
+            for tok in tokens:
+                # +5 points if vibe token matches genre (case-insensitive substring or fuzzy match)
+                if tok in g_lower or (len(tok) >= 4 and fuzz.partial_ratio(tok, g_lower) >= 80):
+                    score += 5
+                # +3 points if vibe token matches title or artist
+                if tok in ti_lower or tok in a_lower or (len(tok) >= 4 and (fuzz.partial_ratio(tok, ti_lower) >= 80 or fuzz.partial_ratio(tok, a_lower) >= 80)):
+                    score += 3
+
+            # +1 point bonus for higher play_count (familiar favorites)
+            if (t.get('play_count') or 0) > 0:
+                score += 1
+
+            t_copy = dict(t)
+            t_copy['affinity_score'] = score
+            scored_tracks.append(t_copy)
+
+        # Sort by affinity score descending, then by play_count descending
+        scored_tracks.sort(key=lambda x: (x['affinity_score'], x.get('play_count', 0)), reverse=True)
+
+        top_candidates = scored_tracks[:100]
+        remaining = scored_tracks[100:]
+
+        discovery_count = min(30, len(remaining))
+        discovery_sample = random.sample(remaining, discovery_count) if discovery_count > 0 else []
+
+        return top_candidates + discovery_sample
+
     def generate_local_radio(self, vibra: str) -> None:
         if not self.client:
+            logger.warning("Gemini client not initialized; skipping local radio generation.")
             return
-            
+
         logger.info(f"Generating Local Radio for vibe: '{vibra}'")
-        
+
         with get_db_connection(self.db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, artist, title, file_path FROM tracks WHERE status IN ('CINTA', 'PERMANENT')")
-            all_tracks = cursor.fetchall()
-            
-        if not all_tracks:
+            cursor.execute("""
+                SELECT id, artist, title, genre, file_path, duration_seconds, play_count 
+                FROM tracks 
+                WHERE status IN ('CINTA', 'PERMANENT') AND file_path IS NOT NULL
+            """)
+            raw_tracks = cursor.fetchall()
+
+        if not raw_tracks:
+            logger.info("No tracks available in CINTA or PERMANENT to generate local radio.")
             return
-            
-        prompt = f"""
-        Act as a DJ. The user wants a local radio playlist matching this vibe: '{vibra}'.
-        Here are the tracks available on their device.
-        Pick the 40 tracks that BEST match this vibe.
-        Return ONLY a JSON list of IDs.
-        
-        TRACKS:
-        """
-        for t_id, t_artist, t_title, _ in all_tracks:
-            prompt += f"[{t_id}] {t_artist} - {t_title}\n"
-            
+
+        track_map = {}
+        tracks = []
+        for row in raw_tracks:
+            t_id, t_artist, t_title, t_genre, t_path, t_dur, t_play_count = row
+            info = {
+                'id': str(t_id),
+                'artist': t_artist or '',
+                'title': t_title or '',
+                'genre': t_genre or '',
+                'file_path': t_path,
+                'duration_seconds': t_dur if t_dur is not None else -1,
+                'play_count': t_play_count or 0,
+            }
+            track_map[str(t_id)] = info
+            tracks.append(info)
+
+        candidates = self._select_radio_candidates(tracks, vibra)
+        logger.info(f"Selected {len(candidates)} candidate tracks out of {len(tracks)} for local radio prompt.")
+
+        prompt = f"""Act as a DJ. The user wants a local radio playlist matching this vibe: '{vibra}'.
+Here are the tracks available on their device.
+Pick the 40 tracks that BEST match this vibe.
+Return ONLY a JSON list of IDs.
+
+TRACKS:
+"""
+        for t in candidates:
+            t_id = t['id']
+            t_artist = t['artist']
+            t_title = t['title']
+            t_genre = t['genre']
+            prompt += f"[{t_id}] {t_artist} - {t_title} [Genre: {t_genre or 'Varied'}]\n"
+
         class RadioSelection(BaseModel):
             ids: list[str]
-            
+
         try:
             response = self.client.models.generate_content(
                 model=self.model_name,
@@ -479,23 +555,28 @@ class CuratorLLM:
                 import json
                 data = json.loads(response.text)
                 selected_ids = data.get('ids', [])
-                
-            import os
+
             os.makedirs(self.paths.playlists_dir, exist_ok=True)
-            m3u8_path = os.path.join(self.paths.playlists_dir, f"Radio_{self.sanitize_filename(vibra)}.m3u8")
-            
+            safe_vibra = self.sanitize_filename(vibra)
+            m3u8_path = os.path.join(self.paths.playlists_dir, f"Radio_{safe_vibra}.m3u8")
+
             with open(m3u8_path, 'w', encoding='utf-8') as f:
                 f.write("#EXTM3U\n")
                 for t_id in selected_ids:
-                    f_path = next((t[3] for t in all_tracks if t[0] == t_id), None)
-                    if f_path and os.path.exists(f_path):
-                        rel_path = os.path.relpath(f_path, self.paths.playlists_dir)
+                    t_id_str = str(t_id).strip()
+                    track_info = track_map.get(t_id_str)
+                    if track_info and track_info['file_path'] and os.path.exists(track_info['file_path']):
+                        dur = track_info['duration_seconds'] if track_info['duration_seconds'] is not None else -1
+                        title_display = f"{track_info['artist']} - {track_info['title']}"
+                        rel_path = os.path.relpath(track_info['file_path'], self.paths.playlists_dir)
+                        f.write(f"#EXTINF:{dur},{title_display}\n")
                         f.write(f"{rel_path}\n")
-                        
+
             logger.info(f"Local radio generated: {m3u8_path} with {len(selected_ids)} tracks.")
-            
+
         except Exception as e:
             logger.error(f"Error generating local radio: {e}")
+
 
     def run_curation_cycle(self, slots: int) -> int:
         """Main curation loop that iterates until slots are filled or max attempts reached."""
