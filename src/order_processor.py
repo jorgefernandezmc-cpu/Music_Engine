@@ -1113,13 +1113,18 @@ class OrderProcessor:
         else:
             return False, f"No alternative official version found automatically. Use manual URL: fix: {c_artist} - {c_title} -> https://music.youtube.com/watch?v=..."
 
-    def clean_peticiones_file(self, peticiones_path: str, header_lines: list[str], failed_lines: list[str] = None, info_lines: list[str] = None):
+    def clean_peticiones_file(self, peticiones_path: str, header_lines: list[str] = None, failed_lines: list[str] = None, info_lines: list[str] = None):
         """Restores requests mailbox header clearing only successful orders and reporting failures and info results."""
         try:
             with open(peticiones_path, 'w', encoding='utf-8') as f:
                 if header_lines:
-                    for hl in header_lines:
-                        f.write(hl if hl.endswith('\n') else hl + '\n')
+                    header_str = "".join(header_lines)
+                    if any(m in header_str for m in ["REMOTE REQUESTS AND COMMANDS MAILBOX", "BUZÓN REMOTO", "BUZÓN DE PETICIONES"]):
+                        target_header = get_mailbox_header(self.paths.language)
+                        f.write(target_header if target_header.endswith('\n') else target_header + '\n')
+                    else:
+                        for hl in header_lines:
+                            f.write(hl if hl.endswith('\n') else hl + '\n')
                 else:
                     target_header = get_mailbox_header(self.paths.language)
                     f.write(target_header if target_header.endswith('\n') else target_header + '\n')
@@ -1151,6 +1156,9 @@ class OrderProcessor:
         Reads and processes all orders and requests in peticiones.txt.
         Returns the number of processed orders.
         """
+        # Always verify and synchronize mailbox guide documentation before processing
+        self.paths.sync_mailbox_header()
+
         peticiones_path = self.paths.peticiones_file
         if not os.path.exists(peticiones_path):
             return 0
@@ -1167,15 +1175,16 @@ class OrderProcessor:
         in_header = True
         for rl in raw_lines:
             s_line = rl.strip()
+            clean_s_line = re.sub(r'^(?:[-*•]\s+|\d+[\.\)]\s+)', '', s_line).strip()
             if in_header:
                 if s_line.startswith('#') or s_line == '':
                     header_lines.append(rl)
                 else:
                     in_header = False
-                    user_lines.append(s_line)
+                    user_lines.append(clean_s_line)
             else:
-                if s_line and not s_line.startswith('#'):
-                    user_lines.append(s_line)
+                if clean_s_line and not clean_s_line.startswith('#'):
+                    user_lines.append(clean_s_line)
 
         if not user_lines:
             return 0
@@ -1415,14 +1424,14 @@ class OrderProcessor:
                         for rl in remaining_lines:
                             failed_commands.append(f'{rl}  # ERROR: No results could be found for this request')
 
-                    self.clean_peticiones_file(peticiones_path, header_lines, failed_commands, info_lines=info_lines)
+                    self.clean_peticiones_file(peticiones_path, None, failed_commands, info_lines=info_lines)
                 else:
                     logger.warning("Requests mailbox file was not cleared due to temporary Gemini error.")
                     for rl in remaining_lines:
                         failed_commands.append(f'{rl}  # ERROR: Temporary error connecting to Gemini (quota or network)')
-                    self.clean_peticiones_file(peticiones_path, header_lines, failed_commands, info_lines=info_lines)
+                    self.clean_peticiones_file(peticiones_path, None, failed_commands, info_lines=info_lines)
             else:
-                self.clean_peticiones_file(peticiones_path, header_lines, failed_commands, info_lines=info_lines)
+                self.clean_peticiones_file(peticiones_path, None, failed_commands, info_lines=info_lines)
 
         finally:
             if close_conn and conn:

@@ -70,3 +70,51 @@ def test_mailbox_header_sync_bilingual(temp_config, temp_env):
     assert "BUZÓN REMOTO DE PETICIONES Y COMANDOS" in new_content
     assert "REMOTE REQUESTS AND COMMANDS MAILBOX" not in new_content
     assert user_command.strip() in new_content
+
+
+def test_mailbox_header_auto_updates_outdated_commands(temp_config, temp_env):
+    """Verifies that an outdated guide header is automatically upgraded while preserving orders."""
+    paths = StoragePaths(temp_config)
+    req_file = paths.requests_file
+
+    legacy_outdated_header = """# ==============================================================================
+#                      BUZÓN DE PETICIONES Y COMANDOS REMOTOS
+# ==============================================================================
+# Escribe tus peticiones o comandos al final de este archivo (una por línea).
+#
+# 1. PEDIR CANCIONES:
+#    - Permanente: Descarga "Nombre" de Artista
+#
+# 2. DESCARGAR ÁLBUMES COMPLETOS:
+#    - Permanente: album: Artista - Álbum
+# ==============================================================================
+# ESCRIBE TUS PETICIONES AQUÍ ABAJO:
+"""
+    pending_orders = "- fix: La Nasa\n- Permanente: album: Lucho RK - SORDO DE UN PIE\n"
+    with open(req_file, "w", encoding="utf-8") as f:
+        f.write(legacy_outdated_header + pending_orders)
+
+    # Set language to Spanish
+    with open(temp_config, "r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+    cfg["system"]["language"] = "es"
+    with open(temp_config, "w", encoding="utf-8") as f:
+        yaml.dump(cfg, f)
+
+    paths_es = StoragePaths(temp_config)
+    updated = paths_es.sync_mailbox_header()
+    assert updated is True
+
+    with open(req_file, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    # Must contain full canonical sections (e.g. 12. GENERAR RADIO LOCAL)
+    assert "BUZÓN REMOTO DE PETICIONES Y COMANDOS" in content
+    assert "12. GENERAR RADIO LOCAL INSTANTÁNEA" in content
+    assert "10. BLINDAR / PROMOVER TEMA A PERMANENTE" in content
+    # Orders must be preserved
+    assert "- fix: La Nasa" in content
+    assert "- Permanente: album: Lucho RK - SORDO DE UN PIE" in content
+
+    # Second run must be idempotent (0 disk writes)
+    assert paths_es.sync_mailbox_header() is False

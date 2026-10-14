@@ -1,6 +1,9 @@
 import os
 import re
 import yaml
+import logging
+
+logger = logging.getLogger('paths')
 
 def sanitize_filename(name: str) -> str:
     """Sanitizes file or folder names to avoid forbidden filesystem characters."""
@@ -11,6 +14,53 @@ def sanitize_filename(name: str) -> str:
     # Clean leading and trailing dots and spaces
     name = name.strip('. ')
     return name or "Unknown"
+
+
+def split_mailbox_content(content: str) -> tuple[str, str, bool]:
+    """
+    Splits mailbox content into (existing_guide_header, user_content, has_guide_header).
+    Recognizes English, Spanish, and legacy guide headers.
+    Preserves all user orders, custom comments, error notices, and results.
+    """
+    if not content:
+        return "", "", False
+
+    lines = content.splitlines(keepends=True)
+    header_lines = []
+    user_lines = []
+    in_header = True
+    has_guide = False
+
+    for line in lines:
+        s_line = line.strip()
+        if in_header:
+            header_lines.append(line)
+            if any(m in s_line for m in [
+                "REMOTE REQUESTS AND COMMANDS MAILBOX",
+                "BUZÓN REMOTO DE PETICIONES Y COMANDOS",
+                "BUZÓN DE PETICIONES Y COMANDOS REMOTOS",
+                "BUZÓN DE PETICIONES",
+                "REMOTE REQUESTS MAILBOX"
+            ]):
+                has_guide = True
+
+            # Check if this line is the delimiter marking the end of the guide header
+            if (s_line.startswith("# WRITE YOUR REQUESTS") or
+                s_line.startswith("# ESCRIBE TUS PETICIONES")):
+                in_header = False
+                has_guide = True
+            # If an actual user order line appears before an explicit delimiter:
+            elif not s_line.startswith("#") and s_line != "":
+                header_lines.pop()
+                user_lines.append(line)
+                in_header = False
+        else:
+            user_lines.append(line)
+
+    if not has_guide:
+        return "", content, False
+
+    return "".join(header_lines), "".join(user_lines), True
 
 DEFAULT_REQUESTS_HEADER_EN = """# ==============================================================================
 #                      REMOTE REQUESTS AND COMMANDS MAILBOX
@@ -187,10 +237,28 @@ class StoragePaths:
             
         self.peticiones_file = self.requests_file
         
-        # System language ("en" or "es", default: "en")
-        self.language = str(self.config.get('system', {}).get('language', 'en')).strip().lower()
-        if self.language not in ['en', 'es']:
-            self.language = 'en'
+        # System language ("en" or "es", default: auto-inferred or "en")
+        raw_lang = self.config.get('system', {}).get('language')
+        if raw_lang:
+            self.language = str(raw_lang).strip().lower()
+            if self.language not in ['en', 'es']:
+                self.language = 'en'
+        else:
+            base_fname = os.path.basename(self.requests_file).lower()
+            if 'peticiones' in base_fname or 'antojo' in base_fname:
+                self.language = 'es'
+            elif os.path.exists(self.requests_file):
+                try:
+                    with open(self.requests_file, 'r', encoding='utf-8', errors='ignore') as f:
+                        snippet = f.read(500)
+                    if "BUZÓN" in snippet or "PETICIONES" in snippet:
+                        self.language = 'es'
+                    else:
+                        self.language = 'en'
+                except Exception:
+                    self.language = 'en'
+            else:
+                self.language = 'en'
             
     @property
     def antojos_file(self) -> str:
@@ -223,76 +291,74 @@ class StoragePaths:
         configured = self.config.get('backup', {}).get('dir', self.config.get('storage', {}).get('backup_dir', 'data/backups'))
         return os.path.abspath(os.path.expanduser(configured))
 
-    def sync_mailbox_header(self):
+    def sync_mailbox_header(self, force: bool = False) -> bool:
         """
-        Ensures the mailbox file exists and has the guide header in the configured language.
-        If the user changed system.language in config.yaml, updates the header
-        without removing or modifying any user requests, commands, or error notes.
+        Ensures the mailbox file exists and its instructional guide header is ALWAYS
+        up to date with the latest canonical command documentation in the configured language.
+
+        - If the file is missing or empty, writes the canonical guide header.
+        - If the header is outdated, in the wrong language, or modified, updates it
+          to match the canonical header while preserving 100% of user commands, notes, and errors.
+        - If the header is already up to date, avoids any disk writes (0 I/O overhead).
+
+        Returns:
+            bool: True if file was created or modified, False if already up to date.
         """
         target_header = get_mailbox_header(self.language)
+        if not target_header.endswith("\n"):
+            target_header += "\n"
+
         if not os.path.exists(self.requests_file) or os.path.getsize(self.requests_file) == 0:
             try:
                 with open(self.requests_file, 'w', encoding='utf-8') as f:
                     f.write(target_header)
-            except Exception:
-                try:
-                    open(self.requests_file, 'a').close()
-                except Exception:
-                    pass
-            return
+                return True
+            except Exception as e:
+                logger.error(f"Error initializing mailbox file: {e}")
+                return False
 
         try:
             with open(self.requests_file, 'r', encoding='utf-8') as f:
                 content = f.read()
-        except Exception:
-            return
+        except Exception as e:
+            logger.error(f"Error reading mailbox file: {e}")
+            return False
 
-        # Check if the file contains one of our recognized tutorial headers
-        is_en_header = "REMOTE REQUESTS AND COMMANDS MAILBOX" in content
-        is_es_header = "BUZÓN REMOTO DE PETICIONES Y COMANDOS" in content
+        existing_guide, user_content, has_guide = split_mailbox_content(content)
 
-        # If it doesn't have either header, it is a custom user file, leave untouched
-        if not is_en_header and not is_es_header:
-            return
+        if not has_guide:
+            # File exists without our recognized tutorial header.
+            # Prepend the canonical header to provide documentation to the user.
+            clean_user = user_content.lstrip("\r\n")
+            new_content = target_header + ("\n" + clean_user if clean_user else "")
+            try:
+                with open(self.requests_file, 'w', encoding='utf-8') as f:
+                    f.write(new_content)
+                return True
+            except Exception as e:
+                logger.error(f"Error prepending mailbox header: {e}")
+                return False
 
-        # Check if header already matches target language
-        target_is_es = (self.language == "es")
-        if target_is_es and is_es_header and not is_en_header:
-            return
-        if not target_is_es and is_en_header and not is_es_header:
-            return
+        # If it has a guide header, compare stripped guide with target_header
+        if not force and existing_guide.strip() == target_header.strip():
+            # Perfectly up to date! Nothing to do.
+            return False
 
-        # Separate header lines from user commands
-        lines = content.splitlines(keepends=True)
-        user_lines = []
-        in_header = True
-
-        for line in lines:
-            s_line = line.strip()
-            if in_header:
-                if (s_line.startswith("# WRITE YOUR REQUESTS BELOW:") or
-                    s_line.startswith("# ESCRIBE TUS PETICIONES DEBAJO:")):
-                    in_header = False
-                elif not s_line.startswith("#") and s_line != "":
-                    in_header = False
-                    user_lines.append(line)
-            else:
-                user_lines.append(line)
-
-        # Reconstruct with target header and preserved user commands
+        # Header is outdated or language changed: update header and preserve user content
+        clean_user = user_content.lstrip("\r\n")
         new_content = target_header
-        if user_lines:
+        if clean_user:
             if not new_content.endswith("\n"):
                 new_content += "\n"
-            while user_lines and user_lines[0].strip() == "":
-                user_lines.pop(0)
-            new_content += "".join(user_lines)
+            new_content += clean_user
 
         try:
             with open(self.requests_file, 'w', encoding='utf-8') as f:
                 f.write(new_content)
-        except Exception:
-            pass
+            return True
+        except Exception as e:
+            logger.error(f"Error updating mailbox header: {e}")
+            return False
 
     def ensure_dirs(self):
         """Ensures main directories exist and initializes or syncs requests mailbox."""

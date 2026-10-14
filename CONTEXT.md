@@ -235,9 +235,12 @@ Resolves all absolute and relative paths based on `config/config.yaml`.
   - `get_craving_track_path(artist, album, title, ext='.opus')`
   - Backward-compatible aliases: `get_permanente_track_path`, `get_cinta_track_path`, `get_antojo_track_path`.
   - Properties: `cravings_dir` (alias `antojos_dir`), `conveyor_dir` (`cinta_dir`), `permanent_dir` (`permanente_dir`).
-- **Dynamic Mailbox Header Synchronization (`sync_mailbox_header`):**
-  - Reads `system.language` from `config/config.yaml` (`"en"` default, or `"es"`).
-  - Automatically ensures the tutorial guide header in `requests.txt` matches the active language, swapping headers cleanly if the user switches languages without deleting or altering pending user orders.
+- **Continuous Mailbox Documentation & Header Synchronization (`sync_mailbox_header`):**
+  - Reads `system.language` from `config/config.yaml` (`"en"` or `"es"`, auto-inferred from filename or content if unspecified).
+  - Automatically ensures the tutorial guide header in `requests.txt` / `peticiones.txt` is ALWAYS up to date with the canonical command reference. If new commands are added or documentation modified, updates the guide header seamlessly without deleting or altering any pending user orders, uncompleted command reports, or info notes.
+  - Idempotent and zero-cost: avoids unnecessary disk I/O when the header is already identical to the canonical template.
+  - Tolerant order parser: strips phone/markdown list bullets (`- `, `* `, `• `, `1. `) automatically so mobile note app formatting does not break command execution.
+  - Integrated into engine startup (`ensure_dirs`), order processing lifecycle (`process_peticiones`), and system health audit (`doctor`).
   - Bilingual notification support in `src/notifications.py` (`notify-send`).
 
 ### 5.2. `src/album_resolver.py` (`resolve_album_track`, `get_primary_artist`)

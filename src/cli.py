@@ -255,6 +255,20 @@ def run_doctor(db_path="data/conveyor_state.sqlite", config_path="config/config.
         except Exception as e:
             print(f"[!] Library Health: Error scanning library ({e})")
 
+    # 8. Mailbox Guide Documentation Audit (requests.txt / peticiones.txt)
+    if os.path.exists(paths.requests_file):
+        try:
+            was_updated = paths.sync_mailbox_header()
+            mb_name = os.path.basename(paths.requests_file)
+            if was_updated:
+                print(f"[✓] Mailbox Guide ({mb_name}): Synchronized & updated to latest documentation ({paths.language.upper()})")
+            else:
+                print(f"[✓] Mailbox Guide ({mb_name}): Up to date with latest commands ({paths.language.upper()})")
+        except Exception as e:
+            print(f"[!] Mailbox Guide: Synchronization failed ({e})")
+    else:
+        print(f"[-] Mailbox Guide: File not found ({paths.requests_file})")
+
     print("="*51 + "\n")
     return 0
 
