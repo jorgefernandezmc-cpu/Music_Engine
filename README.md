@@ -137,24 +137,34 @@ python main.py backup --tag "my_backup"
 Control your music library from your phone by typing natural commands in `requests.txt`:
 
 ```text
-# Download complete studio albums:
+# Download complete studio albums or direct URLs:
 album: Pink Floyd - The Dark Side of the Moon
-craving album: Arctic Monkeys - AM
+https://music.youtube.com/watch?v=5NV6Rdv1a3I
 
-# Download single tracks:
+# Download single tracks (Permanent or Craving):
 permanent: Daft Punk - Get Lucky
 craving: Charli xcx - Apple
+
+# Repair tracks (auto studio search OR manual YouTube URL):
+fix: Pink Floyd - Comfortably Numb
+fix: Daft Punk - Get Lucky -> https://music.youtube.com/watch?v=5NV6Rdv1a3I
+
+# Manage personal playlists and inspect metadata:
+playlist: Workout += Eye of the Tiger
+info: Bohemian Rhapsody
 
 # Promote or discard tracks:
 favorite: Midnight City
 purge: Unwanted Track
+purge permanent: Track I No Longer Want in Permanent
 
-# Reassign album or correct genres:
+# Reassign album, artist, or correct genres:
 album: Track Title -> Correct Studio Album
+artist: Track Title -> New Artist
 genre: Track Title -> Synthwave
 ```
 
-*Spanish keywords (`antojo:`, `disco:`, `favorita:`, `borrar:`, `genero:`) are fully supported interchangeably. See the **[Remote Mailbox Guide](docs/en/mailbox-commands.md)**.*
+*Spanish keywords (`disco:`, `antojo:`, `reparar:`, `lista:`, `artista:`, `info:`, `borrar permanente:`) are fully supported interchangeably. See the **[Remote Mailbox Guide](docs/en/mailbox-commands.md)**.*
 
 ---
 

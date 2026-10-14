@@ -22,40 +22,46 @@ DEFAULT_REQUESTS_HEADER_EN = """# ==============================================
 # 1. REQUEST SONGS (PERMANENT OR TEMPORARY CRAVING):
 #    - Permanent:  Download "Song Title" by Artist  OR  permanent: Artist - Song
 #    - Craving:    craving: Artist - Song  OR  antojo: Artist - Song
+#    - Direct URL: https://music.youtube.com/watch?v=...  (or craving: https://...)
 #    - Discovery:  Duki / Melodic techno for workouts (AI catalog -> Permanent)
 #
 # 2. DOWNLOAD FULL ALBUMS (Official full album catalog):
 #    - Permanent album: album: Artist - Album  OR  permanent album: Artist - Album
 #    - Craving album:   craving album: Artist - Album  OR  antojo album: Artist - Album
 #
-# 3. REASSIGN SONG TO OFFICIAL ALBUM (Moves physical files and tags):
-#    album: <Song> -> <Album Name>
-#    Example:  album: NO PIENSO LLAMAR -> STORM
+# 3. REPAIR OR REPLACE AUDIO (Auto studio search OR manual YT Music URL):
+#    - Auto-fix:   fix: Artist - Song
+#    - Manual URL: fix: Artist - Song -> https://music.youtube.com/watch?v=...
 #
-# 4. FIX OR ASSIGN MUSIC GENRE (SQLite + Physical metadata):
-#    genre: <Song> -> <New Genre>
-#    Example:  genre: So Payaso -> Hard Rock / Rock
-#    (Or leave without arrow to auto-correct:  genre: Neverita)
+# 4. REASSIGN ALBUM OR ARTIST (Moves physical files and updates tags):
+#    - Album:      album: <Song> -> <Album Name>
+#    - Artist:     artist: <Song> -> <New Artist>
 #
-# 5. UPDATE OR UPGRADE LYRICS (Fresh real-time synced .lrc download):
+# 5. PERSONAL PLAYLISTS (Add/Remove from user playlists):
+#    - Add:        playlist: Workout += Eye of the Tiger
+#    - Remove:     playlist: Workout -= Eye of the Tiger
+#
+# 6. FORCE RE-DOWNLOAD TRACK (Cleans cache and re-downloads fresh):
+#    redownload: <Artist - Song>
+#
+# 7. INSPECT TRACK INFORMATION:
+#    info: <Artist - Song>
+#
+# 8. UPDATE OR UPGRADE LYRICS (Fresh real-time synced .lrc download):
 #    lyrics: <Song>
-#    Example:  lyrics: Bohemian Rhapsody
 #
-# 6. SHIELD / PROMOTE SONG TO PERMANENT (Moves from Conveyor or Cravings to Permanent):
-#    favorite: <Song>  OR  permanente: <Song>
-#    Example:  favorite: Cuica
+# 9. FIX OR ASSIGN MUSIC GENRE (SQLite + Physical metadata):
+#    genre: <Song> -> <New Genre>  (or leave without arrow to auto-detect)
 #
-# 7. REMOVE / PURGE SONG (Physical deletion from Conveyor or Cravings):
-#    purge: <Song>
-#    Example:  purge: Song I Dislike
+# 10. SHIELD / PROMOTE SONG TO PERMANENT (Moves from Conveyor or Cravings):
+#    favorite: <Song>  OR  shield: <Song>  OR  permanente: <Song>
 #
-# 8. REPAIR QUESTIONABLE TRACK / AUDIT OFFICIAL VERSION:
-#    fix: <Song Name>
-#    Example:  fix: Me Enamoraste
+# 11. REMOVE / PURGE SONGS:
+#    - From Conveyor/Cravings:  purge: <Song>  OR  delete: <Song>
+#    - From Permanent Library:  purge permanent: <Artist - Song>
 #
-# 9. CREATE INSTANT LOCAL RADIO (from your offline collection):
+# 12. CREATE INSTANT LOCAL RADIO (from your offline collection):
 #    radio: <Vibe or Mood>
-#    Example:  radio: Acoustic chill
 # ==============================================================================
 # WRITE YOUR REQUESTS BELOW:
 """
@@ -70,40 +76,46 @@ DEFAULT_REQUESTS_HEADER_ES = """# ==============================================
 # 1. PEDIR CANCIONES (PERMANENTE O ANTOJO TEMPORAL):
 #    - Permanente:  Descargar "Título" de Artista  O  permanente: Artista - Tema
 #    - Antojo:      antojo: Artista - Tema  O  craving: Artista - Tema
+#    - Enlace URL:  https://music.youtube.com/watch?v=...  (o antojo: https://...)
 #    - Descubrir:   Duki / Melodic techno para entrenar (Catálogo IA -> Permanente)
 #
 # 2. DESCARGAR DISCOS COMPLETOS (Catálogo oficial de álbumes completos):
 #    - Álbum permanente: disco: Artista - Disco  O  album: Artista - Álbum
 #    - Álbum en antojo:  antojo album: Artista - Disco  O  craving album: Artista - Álbum
 #
-# 3. REASIGNAR CANCIÓN A ÁLBUM OFICIAL (Mueve archivos físicos y etiquetas):
-#    album: <Tema> -> <Nombre del Álbum>
-#    Ejemplo:  album: NO PIENSO LLAMAR -> STORM
+# 3. REPARAR O CAMBIAR AUDIO (Búsqueda oficial de estudio O enlace manual de YT Music):
+#    - Auto-reparar:  reparar: Artista - Tema  (o fix: Tema)
+#    - Enlace manual: reparar: Artista - Tema -> https://music.youtube.com/watch?v=...
 #
-# 4. CORREGIR O ASIGNAR GÉNERO (SQLite + Metadatos físicos):
-#    genero: <Tema> -> <Nuevo Género>
-#    Ejemplo:  genero: So Payaso -> Hard Rock / Rock
-#    (O dejar sin flecha para auto-corregir con IA:  genero: Neverita)
+# 4. REASIGNAR ÁLBUM O ARTISTA (Mueve archivos físicos y actualiza etiquetas):
+#    - Álbum:         album: <Tema> -> <Nombre del Álbum>
+#    - Artista:       artista: <Tema> -> <Nuevo Artista>
 #
-# 5. ACTUALIZAR LETRAS SINCRONIZADAS (Descarga en tiempo real de .lrc sincronizado):
+# 5. LISTAS DE REPRODUCCIÓN PROPIAS (Añadir/Quitar temas):
+#    - Añadir:        lista: Gym += Eye of the Tiger
+#    - Quitar:        lista: Gym -= Eye of the Tiger
+#
+# 6. FORZAR RE-DESCARGA DE PISTA (Borra caché y descarga de nuevo limpia):
+#    redescargar: <Artista - Tema>  (o redownload: Tema)
+#
+# 7. CONSULTAR INFORMACIÓN DE UNA PISTA:
+#    info: <Artista - Tema>  (o informacion: Tema)
+#
+# 8. ACTUALIZAR LETRAS SINCRONIZADAS (Descarga en tiempo real de .lrc sincronizado):
 #    letra: <Tema>  O  lyrics: <Tema>
-#    Ejemplo:  letra: Bohemian Rhapsody
 #
-# 6. BLINDAR / PROMOVER TEMA A PERMANENTE (Mueve de Cinta o Antojos a Permanente):
-#    favorita: <Tema>  O  permanente: <Tema>
-#    Ejemplo:  favorita: Cuica
+# 9. CORREGIR O ASIGNAR GÉNERO (SQLite + Metadatos físicos):
+#    genero: <Tema> -> <Nuevo Género>  (o sin flecha para auto-detectar con IA)
 #
-# 7. BORRAR / PURGAR TEMA (Eliminación física de Cinta o Antojos):
-#    borrar: <Tema>  O  eliminar: <Tema>
-#    Ejemplo:  borrar: Canción Que No Me Gusta
+# 10. BLINDAR / PROMOVER TEMA A PERMANENTE (Mueve de Cinta o Antojos):
+#    favorita: <Tema>  O  blindar: <Tema>  O  permanente: <Tema>
 #
-# 8. REPARAR PISTA DUDOSA / AUDITAR VERSIÓN OFICIAL:
-#    reparar: <Nombre del Tema>  O  fix: <Nombre del Tema>
-#    Ejemplo:  reparar: Me Enamoraste
+# 11. BORRAR / PURGAR CANCIONES:
+#    - De Cinta o Antojos:      borrar: <Tema>  O  eliminar: <Tema>
+#    - De Colección Permanente: borrar permanente: <Artista - Tema>
 #
-# 9. GENERAR RADIO LOCAL INSTANTÁNEA (de tu colección sin conexión):
+# 12. GENERAR RADIO LOCAL INSTANTÁNEA (de tu colección sin conexión):
 #    radio: <Ambiente o Estilo>
-#    Ejemplo:  radio: Acústico relajante
 # ==============================================================================
 # ESCRIBE TUS PETICIONES DEBAJO:
 """

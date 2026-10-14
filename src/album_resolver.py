@@ -294,7 +294,7 @@ def auto_fix_track(yt, artist: str, title: str, current_vid: str = None, client 
             results = yt.search(q, filter="songs", limit=10)
             for r in results:
                 r_vid = r.get('videoId')
-                if not r_vid:
+                if not r_vid or (current_vid and r_vid == current_vid):
                     continue
                 r_title = r.get('title', '')
                 r_artists = [a['name'] for a in r.get('artists', []) if 'name' in a]
@@ -327,6 +327,8 @@ def auto_fix_track(yt, artist: str, title: str, current_vid: str = None, client 
         vid_results = yt.search(f"{primary} {title} official video", filter="videos", limit=5)
         for r in vid_results:
             r_vid = r.get('videoId')
+            if not r_vid or (current_vid and r_vid == current_vid):
+                continue
             r_title = r.get('title', '')
             r_artist = r.get('artists', [{}])[0].get('name', '') if r.get('artists') else ''
             
@@ -358,19 +360,20 @@ def auto_fix_track(yt, artist: str, title: str, current_vid: str = None, client 
             if '-' in ai_text:
                 ai_parts = ai_text.split('-', 1)
                 ai_query = f"{ai_parts[0].strip()} {ai_parts[1].strip()}"
-                res = yt.search(ai_query, filter="songs", limit=3)
-                if res and res[0].get('videoId'):
-                    vid = res[0]['videoId']
-                    logger.info(f"Auto-Fix (AI assisted) resolved '{artist} - {title}' [ID: {vid}]")
-                    return {
-                        'id': vid,
-                        'title': title,
-                        'artist': artist,
-                        'primary_artist': primary,
-                        'album': "Singles",
-                        'fixed': True,
-                        'method': 'ai_fallback'
-                    }
+                res = yt.search(ai_query, filter="songs", limit=5)
+                for cand_res in (res or []):
+                    c_vid = cand_res.get('videoId')
+                    if c_vid and (not current_vid or c_vid != current_vid):
+                        logger.info(f"Auto-Fix (AI assisted) resolved '{artist} - {title}' [ID: {c_vid}]")
+                        return {
+                            'id': c_vid,
+                            'title': title,
+                            'artist': artist,
+                            'primary_artist': primary,
+                            'album': "Singles",
+                            'fixed': True,
+                            'method': 'ai_fallback'
+                        }
         except Exception as e:
             logger.error(f"Failure in Auto-Fix level 3 (AI): {e}")
 

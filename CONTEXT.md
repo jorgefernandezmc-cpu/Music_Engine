@@ -268,15 +268,21 @@ Central orchestrator of the music lifecycle.
      - **Craving Single Track (Temporary):** `craving: <Artist> - <Title>` or `antojo: <Artist> - <Title>` (downloads directly into Cravings folder).
      - **Full Permanent Album:** `album: <Artist> - <Album>` or `permanent album: <Artist> - <Album>` (downloads complete official tracklist to Permanent).
      - **Full Craving Album (Temporary):** `craving album: <Artist> - <Album>` or `antojo album: <Artist> - <Album>` (downloads complete official tracklist to Cravings).
+     - **Direct URLs (YouTube, YT Music, Spotify):** `https://...` or `url: https://...` or `craving: https://...` (downloads exact video, album or playlist).
      - **Genre Correction:** `genre: <track> -> <new_genre>` (or `genre: <track>` for automatic AI re-analysis; updates SQLite and physical tags).
      - **Lyrics Refresh:** `lyrics: <track>` (forces re-scan and clean download of synced `.lrc` lyrics).
-     - **Promote to Permanent:** `favorite: <track>` / `permanent: <track>` (moves from Conveyor or Cravings to Permanent album folder immediately).
+     - **Promote to Permanent:** `favorite: <track>` / `permanent: <track>` / `shield: <track>` (moves from Conveyor or Cravings to Permanent album folder immediately with artist-track disambiguation).
      - **Purge Track:** `purge: <track>` / `delete: <track>` (removes from Conveyor or Cravings and cleans audio + `.lrc`).
-     - **Album Reassignment:** `album: <track> -> <new_album>` (moves audio and `.lrc`, updates tags, cleans old directories).
-     - **Self-Repair:** `fix: <track>` (downloads verified official version).
+     - **Purge from Permanent:** `purge permanent: <Artist - Track>` / `borrar permanente: <Artist - Track>` (removes physical audio and lyrics from `Permanent/`, cleans directories, and marks `PURGED`).
+     - **Reassign Album:** `album: <track> -> <new_album>` (moves audio and `.lrc`, updates tags, cleans old directories).
+     - **Reassign Artist:** `artist: <track> -> <new_artist>` / `artista: <track> -> <new_artist>` (moves audio and `.lrc`, updates tags, updates SQLite).
+     - **Personal Playlists:** `playlist: <Name> += <track>` or `playlist: <Name> -= <track>` (adds/removes songs from user M3U8 playlists).
+     - **Self-Repair Audio:** `fix: <track>` (downloads verified official studio version skipping bad video ID) OR `fix: <track> -> <URL>` (replaces audio with manual YouTube/YT Music URL).
+     - **Force Re-download:** `redownload: <track>` / `redescargar: <track>` (clears cache and re-downloads fresh audio).
+     - **Inspect Track Info:** `info: <track>` (writes technical summary comment `# [INFO] ...` into mailbox).
      - **Local Radios:** `radio: <vibe>`.
      - **Direct Permanent Requests:** Downloads by song, artist, or style directly into the permanent library via AI Curator.
-     - **Feedback Loop:** Successfully processed commands are cleared from the file; failed commands are retained with an explanation comment.
+     - **Feedback Loop:** Successfully processed commands are cleared from the file; info results and failed commands are retained with formatted comments.
   8. **Strict Duplicate Prevention in Conveyor:** Conveyor never downloads tracks already in `Permanente` (both by YouTube ID and normalized title/artist match).
   9. **Cravings Retention & Auto-Purge (`_purge_cravings`):** Tracks in Cravings (`ANTOJO` status) are automatically purged after exceeding configured `cravings.retention_days` (default 30 days without play), removing physical audio files, `.lrc` sidecars, empty directories, and updating status to `PURGED`.
   10. **Automatic Promotion:** Tracks with sufficient plays (>=15) are promoted from Conveyor to `Permanente`.

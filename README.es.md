@@ -137,24 +137,34 @@ python main.py backup --tag "mi_copia"
 Controla tu colección musical desde el teléfono escribiendo comandos naturales en `requests.txt` o `peticiones.txt`:
 
 ```text
-# Descargar álbumes de estudio completos:
+# Descargar álbumes de estudio completos o enlaces directos:
 disco: Pink Floyd - The Dark Side of the Moon
-antojo album: Arctic Monkeys - AM
+https://music.youtube.com/watch?v=5NV6Rdv1a3I
 
-# Descargar canciones sueltas:
+# Descargar canciones sueltas (Permanente o Antojo):
 permanente: Daft Punk - Get Lucky
 antojo: Charli xcx - Apple
+
+# Reparar pistas (auto de estudio O con enlace manual de YouTube):
+reparar: Pink Floyd - Comfortably Numb
+fix: Daft Punk - Get Lucky -> https://music.youtube.com/watch?v=5NV6Rdv1a3I
+
+# Gestionar listas de reproducción propias y consultar información:
+lista: Gym += Eye of the Tiger
+info: Bohemian Rhapsody
 
 # Promover o descartar canciones:
 favorita: Midnight City
 borrar: Canción No Deseada
+borrar permanente: Pista Que No Quiero En Permanente
 
-# Reasignar álbum o corregir géneros:
+# Reasignar álbum, artista o corregir géneros:
 album: Título Canción -> Disco Correcto
+artista: Título Canción -> Nuevo Artista
 genero: Título Canción -> Synthwave
 ```
 
-*Tanto la sintaxis en español (`disco:`, `antojo:`, `permanente:`, `favorita:`, `borrar:`, `genero:`) como en inglés (`album:`, `craving:`, `permanent:`, `favorite:`, `purge:`, `genre:`) son completamente intercambiables. Consulta la **[Guía del Buzón Remoto](docs/es/mailbox-commands.md)**.*
+*Tanto la sintaxis en español (`disco:`, `antojo:`, `reparar:`, `lista:`, `artista:`, `info:`) como en inglés (`album:`, `craving:`, `fix:`, `playlist:`, `artist:`, `info:`) son 100% intercambiables. Consulta la **[Guía del Buzón Remoto](docs/es/mailbox-commands.md)**.*
 
 ---
 
