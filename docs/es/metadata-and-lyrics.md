@@ -2,7 +2,7 @@
 
 <p align="right">
   <b>Language / Idioma:</b>
-  <a href="../en/metadata-and-lyrics.md">English</a> | <b>Español</b>
+  <a href="../en/metadata-and-lyrics.md">🇬🇧 English</a> | <b>🇪🇸 Español</b>
 </p>
 
 <p align="center">

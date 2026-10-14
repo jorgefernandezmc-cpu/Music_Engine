@@ -78,6 +78,6 @@ docs/
 ---
 
 <p align="center">
-  <a href="../README.md"><b>⬅ English README</b></a> &nbsp;•&nbsp;
+  <a href="../README.md"><b>⬅ 🇬🇧 English README</b></a> &nbsp;•&nbsp;
   <a href="../README.es.md"><b>🇪🇸 README en Español</b></a>
 </p>

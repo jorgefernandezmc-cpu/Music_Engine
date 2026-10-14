@@ -2,7 +2,7 @@
 
 <p align="right">
   <b>Language / Idioma:</b>
-  <b>English</b> | <a href="../es/mailbox-commands.md">Español</a>
+  <b>🇬🇧 English</b> | <a href="../es/mailbox-commands.md">🇪🇸 Español</a>
 </p>
 
 <p align="center">

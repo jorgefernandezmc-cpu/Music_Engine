@@ -2,7 +2,7 @@
 
 <p align="right">
   <b>Language / Idioma:</b>
-  <a href="../en/backup-and-migration.md">English</a> | <b>Español</b>
+  <a href="../en/backup-and-migration.md">🇬🇧 English</a> | <b>🇪🇸 Español</b>
 </p>
 
 <p align="center">

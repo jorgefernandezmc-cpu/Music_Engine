@@ -2,7 +2,7 @@
 
 <p align="right">
   <b>Language / Idioma:</b>
-  <b>English</b> | <a href="../es/README.md">Español</a>
+  <b>🇬🇧 English</b> | <a href="../es/README.md">🇪🇸 Español</a>
 </p>
 
 <p align="center">
