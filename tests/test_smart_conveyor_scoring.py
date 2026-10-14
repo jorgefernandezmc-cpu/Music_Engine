@@ -251,3 +251,81 @@ def test_engine_lifecycle_fallback_when_disabled(temp_config, temp_db, temp_env,
     # Under legacy rules, 8 plays < 15, so it remains in CINTA
     assert status == "CINTA"
     conn.close()
+
+
+def test_loved_tracks_external_auto_download_and_cravings_promotion(temp_config, temp_db, temp_env, monkeypatch):
+    """
+    Verifies that when a user loves a track:
+    1. A track in ANTOJO/CINTA is promoted to PERMANENT.
+    2. An external track (from Spotify/YT Music via Pano Scrobbler) not in DB is queued for Permanent download.
+    """
+    conn = get_db_connection(temp_db)
+    cursor = conn.cursor()
+    ensure_db_indexes(conn)
+
+    # Insert an existing craving track
+    crav_file = os.path.join(temp_env["cravings_dir"], "ArtistCrav - AntojoHit.opus")
+    with open(crav_file, "wb") as f:
+        f.write(b"CRAVING_AUDIO")
+    cursor.execute("""
+        INSERT INTO tracks (id, title, artist, album, status, is_permanent, play_count, skip_count, file_path, added_at, last_played_at)
+        VALUES ('t_crav', 'AntojoHit', 'ArtistCrav', 'Singles', 'ANTOJO', 0, 1, 0, ?, datetime('now', '-2 days'), datetime('now', '-1 days'))
+    """, (crav_file,))
+    conn.commit()
+    conn.close()
+
+    engine = MusicEngine(db_path=temp_db, config_path=temp_config)
+    monkeypatch.setattr(engine.telemetry, "is_telemetry_fresh", lambda: True)
+    monkeypatch.setattr(engine.telemetry, "process_listens", lambda: (0, 0))
+    # Return 2 loved tracks: one existing in ANTOJO, one external (not in DB)
+    monkeypatch.setattr(engine.telemetry, "get_loved_tracks", lambda: [
+        ("ArtistCrav", "AntojoHit"),
+        ("Coldplay", "Yellow")
+    ])
+
+    saved_calls = []
+    def mock_validate_and_save(candidates, target_folder="Cinta", target_status="PENDING"):
+        saved_calls.append((candidates, target_folder, target_status))
+        # Insert into DB as PENDING in Permanent
+        with get_db_connection(temp_db) as c:
+            cur = c.cursor()
+            for cand in candidates:
+                cur.execute("""
+                    INSERT INTO tracks (id, title, artist, album, status, is_permanent, file_path)
+                    VALUES (?, ?, ?, 'Album', ?, 1, '/dummy/path')
+                """, (f"vid_{cand.title}", cand.title, cand.artist, target_status))
+            c.commit()
+        return len(candidates)
+
+    monkeypatch.setattr(engine.curator, "validate_and_save", mock_validate_and_save)
+    monkeypatch.setattr(engine.curator, "run_curation_cycle", lambda n: 0)
+    monkeypatch.setattr(engine.downloader, "download_pending_tracks", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(engine.order_processor, "process_peticiones", lambda: 0)
+    monkeypatch.setattr(engine, "_check_release_radar", lambda: None)
+    monkeypatch.setattr(engine, "_check_daily_lyrics_scan", lambda: None)
+    monkeypatch.setattr(engine, "_check_daily_genre_scan", lambda: None)
+
+    engine.run(fill_mode=False)
+
+    # 1. Verify craving track was promoted to PERMANENT
+    conn = get_db_connection(temp_db)
+    cursor = conn.cursor()
+    cursor.execute("SELECT status, is_permanent FROM tracks WHERE id = 't_crav'")
+    row_crav = cursor.fetchone()
+    assert row_crav[0] == "PERMANENT"
+    assert row_crav[1] == 1
+
+    # 2. Verify external loved track was queued for Permanent download
+    assert len(saved_calls) == 1
+    candidates, target_folder, target_status = saved_calls[0]
+    assert candidates[0].title == "Yellow"
+    assert candidates[0].artist == "Coldplay"
+    assert target_folder == "Permanente"
+    assert target_status == "PENDING"
+
+    cursor.execute("SELECT status, is_permanent FROM tracks WHERE id = 'vid_Yellow'")
+    row_ext = cursor.fetchone()
+    assert row_ext[0] == "PENDING"
+    assert row_ext[1] == 1
+    conn.close()
+

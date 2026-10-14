@@ -354,56 +354,99 @@ class MusicEngine:
         processed_listens, _ = self.telemetry.process_listens()
         logger.info(f"New scrobbles processed: {processed_listens}")
 
-        # 4. Shielding via Heart (ListenBrainz Loved Tracks)
+        # 4. Shielding and Auto-Download via Heart (ListenBrainz Loved Tracks)
         loved_tracks = self.telemetry.get_loved_tracks()
         if loved_tracks:
             loved_moved_count = 0
+            new_loved_queued = 0
+            auto_dl_loved = self.telemetry_config.get('auto_download_loved', True)
+            to_queue_external = []
+
             with get_db_connection(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT id, artist, title, file_path, album FROM tracks WHERE status = 'CINTA' AND file_path IS NOT NULL")
-                candidates = cursor.fetchall()
+                cursor.execute("""
+                    SELECT id, artist, title, file_path, album, status 
+                    FROM tracks 
+                    WHERE status IN ('PERMANENT', 'CINTA', 'ANTOJO', 'PENDING')
+                """)
+                existing_tracks = cursor.fetchall()
 
-                if candidates:
-                    from thefuzz import fuzz
-                    artist_thresh = self.telemetry_config.get('loved_fuzzy_artist_threshold', 80)
-                    title_thresh = self.telemetry_config.get('loved_fuzzy_title_threshold', 85)
+                from thefuzz import fuzz
+                artist_thresh = self.telemetry_config.get('loved_fuzzy_artist_threshold', 80)
+                title_thresh = self.telemetry_config.get('loved_fuzzy_title_threshold', 85)
 
-                    for l_artist, l_title in loved_tracks:
-                        l_art_l = l_artist.lower()
-                        l_tit_l = l_title.lower()
+                for l_artist, l_title in loved_tracks:
+                    l_art_l = l_artist.lower().strip()
+                    l_tit_l = l_title.lower().strip()
 
-                        for c_id, c_artist, c_title, c_path, c_album in candidates:
-                            if not c_path or not os.path.exists(c_path):
-                                continue
+                    match_found = None
+                    for c_id, c_artist, c_title, c_path, c_album, c_status in existing_tracks:
+                        c_art_l = c_artist.lower().strip()
+                        c_tit_l = c_title.lower().strip()
 
-                            c_art_l = c_artist.lower()
-                            c_tit_l = c_title.lower()
+                        # Exact match
+                        if l_art_l == c_art_l and l_tit_l == c_tit_l:
+                            match_found = (c_id, c_artist, c_title, c_path, c_album, c_status)
+                            break
 
-                            # Exact or fuzzy match
-                            match = (l_art_l == c_art_l and l_tit_l == c_tit_l)
-                            if not match:
-                                s1 = fuzz.token_set_ratio(l_art_l, c_art_l)
-                                s2 = fuzz.token_set_ratio(l_tit_l, c_tit_l)
-                                match = (s1 >= artist_thresh and s2 >= title_thresh)
+                        # Fuzzy match
+                        s1 = fuzz.token_set_ratio(l_art_l, c_art_l)
+                        s2 = fuzz.token_set_ratio(l_tit_l, c_tit_l)
+                        if s1 >= artist_thresh and s2 >= title_thresh:
+                            match_found = (c_id, c_artist, c_title, c_path, c_album, c_status)
+                            break
 
-                            if match:
-                                new_path = self.paths.get_permanente_track_path(c_artist, c_album, c_title)
-                                os.makedirs(os.path.dirname(new_path), exist_ok=True)
-                                try:
-                                    shutil.move(c_path, new_path)
-                                    old_lrc = os.path.splitext(c_path)[0] + ".lrc"
-                                    new_lrc = os.path.splitext(new_path)[0] + ".lrc"
-                                    if os.path.exists(old_lrc):
-                                        shutil.move(old_lrc, new_lrc)
+                    if match_found:
+                        m_id, m_artist, m_title, m_path, m_album, m_status = match_found
+                        # If already PERMANENT or already PENDING, nothing to do
+                        if m_status in ('PERMANENT', 'PENDING'):
+                            continue
 
-                                    cursor.execute("UPDATE tracks SET status = 'PERMANENT', is_permanent = 1, file_path = ? WHERE id = ?", (new_path, c_id))
-                                    loved_moved_count += 1
-                                    logger.info(f"Heart on ListenBrainz! Shielded in Permanent: {c_artist} - {c_title} -> {new_path}")
-                                except Exception as e:
-                                    logger.error(f"Failed shielding by heart {c_id}: {e}")
-                                break
+                        # If in CINTA or ANTOJO, promote to PERMANENT
+                        if m_status in ('CINTA', 'ANTOJO') and m_path and os.path.exists(m_path):
+                            primary_artist = get_primary_artist(m_artist)
+                            new_path = self.paths.get_permanente_track_path(primary_artist, m_album, m_title)
+                            os.makedirs(os.path.dirname(new_path), exist_ok=True)
+                            try:
+                                shutil.move(m_path, new_path)
+                                old_lrc = os.path.splitext(m_path)[0] + ".lrc"
+                                new_lrc = os.path.splitext(new_path)[0] + ".lrc"
+                                if os.path.exists(old_lrc):
+                                    shutil.move(old_lrc, new_lrc)
 
-                    conn.commit()
+                                cursor.execute("""
+                                    UPDATE tracks 
+                                    SET status = 'PERMANENT', is_permanent = 1, file_path = ? 
+                                    WHERE id = ?
+                                """, (new_path, m_id))
+                                loved_moved_count += 1
+                                logger.info(f"Heart on ListenBrainz! Promoted to Permanent: {m_artist} - {m_title} -> {new_path}")
+                            except Exception as e:
+                                logger.error(f"Failed promoting loved track {m_id}: {e}")
+
+                    elif auto_dl_loved:
+                        to_queue_external.append((l_artist, l_title))
+
+                conn.commit()
+
+            # Outside connection context: resolve and queue external loved tracks cleanly
+            for l_artist, l_title in to_queue_external:
+                logger.info(f"❤️ External loved track detected ({l_artist} - {l_title}). Resolving for Permanent download...")
+                rec = TrackRecommendation(
+                    title=l_title,
+                    artist=l_artist,
+                    genre_context="Loved",
+                    discovery_type="loved",
+                    reason="Loved on ListenBrainz"
+                )
+                val_count = self.curator.validate_and_save([rec], target_folder="Permanente", target_status="PENDING")
+                if val_count > 0:
+                    with get_db_connection(self.db_path) as c_clean:
+                        cur_clean = c_clean.cursor()
+                        cur_clean.execute("DELETE FROM orphan_scrobbles WHERE LOWER(artist) = ? AND LOWER(title) = ?", (l_artist.lower().strip(), l_title.lower().strip()))
+                        c_clean.commit()
+                    logger.info(f"❤️ Successfully queued loved track for Permanent download: {l_artist} - {l_title}")
+                    send_notification("Loved Track Added", f"❤️ {l_artist} - {l_title} queued for Permanent library")
 
             if loved_moved_count > 0:
                 self.playlists.update_all_playlists()
@@ -639,6 +682,8 @@ class MusicEngine:
                 logger.info(f"{remaining} PENDING tracks in queue. Starting download batch...")
                 downloaded = self.downloader.download_pending_tracks(retry_failed=True)
                 total_downloaded += downloaded
+                if downloaded == 0:
+                    break
 
                 cursor.execute("SELECT COUNT(*) FROM tracks WHERE status = 'PENDING'")
                 new_remaining = cursor.fetchone()[0]

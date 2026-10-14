@@ -313,8 +313,12 @@ Central orchestrator of the music lifecycle.
   15. **Consolidated Desktop Notifications:** No per-song spam. Emits a single grouped notification after lyrics batches (with expandable track breakdown) and an execution summary at the end of the engine run.
 
 ### 5.5. `src/telemetry.py` (`TelemetryEngine`)
-- Connects to the ListenBrainz API to retrieve scrobble history and "Loved Tracks".
+- Connects to the ListenBrainz API to retrieve scrobble history and "Loved Tracks" (heart feedback events from Pano Scrobbler, web, or external players).
 - Cross-references IDs and fuzzy metadata with local database to match plays with high accuracy.
+- **Loved Tracks Heart Automation:**
+  - If a loved track is in `Cinta` (`Conveyor`) or `Antojos` (`Cravings`), promotes it physically and in SQLite to `Permanent`.
+  - If a loved track was discovered externally (played on YouTube Music or Spotify without being in the local database), the engine automatically resolves the official studio version via `resolve_album_track`, queues it into `tracks` as `PENDING` with `is_permanent = 1`, downloads it, embeds tags and lyrics, applies ReplayGain, and saves it directly to `Permanent`.
+  - Resurrects previously `ARCHIVED`, `PURGED`, or `FAILED` tracks to `Permanent` if loved.
 
 ### 5.6. `src/curator_llm.py` (`CuratorLLM`)
 - Integrates Google GenAI SDK (Gemini) to evaluate track recommendations based on taste profile (`data/taste_profile.json`).

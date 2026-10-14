@@ -277,8 +277,8 @@ class CuratorLLM:
                     current_status = row[0]
                     current_path = row[1]
                     
-                    if current_status == 'ARCHIVED':
-                        logger.info(f"Resurrecting archived track '{rec.artist} - {rec.title}' (ID: {vid})")
+                    if current_status in ('ARCHIVED', 'PURGED', 'FAILED'):
+                        logger.info(f"Resurrecting {current_status.lower()} track '{rec.artist} - {rec.title}' (ID: {vid}) to {target_status}")
                         cursor.execute("""
                             UPDATE tracks 
                             SET status = ?, file_path = ?, is_permanent = ?, album = ?

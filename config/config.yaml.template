@@ -111,6 +111,8 @@ telemetry:
   loved_fuzzy_artist_threshold: 80
   loved_fuzzy_title_threshold: 85
   lookback_days: 30
+  # Automatically download loved tracks (hearts from Pano Scrobbler / ListenBrainz) to Permanent:
+  auto_download_loved: true
 
 # ------------------------------------------------------------------------------
 # 6. RELEASE RADAR (TOP ARTISTS)
