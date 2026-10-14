@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from thefuzz import fuzz
 import yaml
 from dotenv import load_dotenv
-from src.db import get_db_connection
+from src.db import get_db_connection, ensure_db_indexes
 
 # Ensure logs dir exists
 os.makedirs('logs', exist_ok=True)
@@ -39,6 +39,11 @@ class TelemetryEngine:
             self.base_url = raw_lb_url
             self.api_url = f"{raw_lb_url}/1"
         self.fuzzy_threshold = int(self.config.get('telemetry', {}).get('fuzzy_threshold', 80))
+        try:
+            with get_db_connection(self.db_path) as conn:
+                ensure_db_indexes(conn)
+        except Exception as e:
+            logger.warning(f"Failed to ensure database indexes in TelemetryEngine: {e}")
         
     def normalize_track_string(self, text: str) -> str:
         """Normalizes track strings removing accents, boilerplate tags, and punctuation."""
@@ -148,59 +153,152 @@ class TelemetryEngine:
         return all_listens
 
     def get_loved_tracks(self) -> list[tuple[str, str]]:
+        if not self.lb_user:
+            logger.error("LISTENBRAINZ_USER is not configured.")
+            return []
+
         url = f"{self.api_url}/feedback/user/{self.lb_user}/get-feedback"
         params = {"score": 1, "count": 100}
         headers = {}
         if self.lb_token:
             headers['Authorization'] = f"Token {self.lb_token}"
+
         try:
-            r = requests.get(url, headers=headers, params=params)
-            if r.status_code == 200:
-                data = r.json()
-                if not data: data = {}
-                feedbacks = data.get('feedback') or []
-                
-                loved_msids = []
-                for item in feedbacks:
-                    if not item: continue
-                    if item.get('score') == 1 and item.get('recording_msid'):
-                        loved_msids.append(item.get('recording_msid'))
-                
-                if not loved_msids:
-                    return []
-                    
-                # Fetch recent listens to resolve MSIDs
-                url_ls = f"{self.api_url}/user/{self.lb_user}/listens"
-                msid_map = {}
-                
-                max_ts = None
-                for _ in range(10): # Fetch up to 500 recent listens
-                    p = {"count": 100}
-                    if max_ts: p["max_ts"] = max_ts
-                    r_ls = requests.get(url_ls, params=p)
-                    if r_ls.status_code != 200: break
-                    ls_data = r_ls.json().get('payload', {}).get('listens', [])
-                    if not ls_data: break
-                    
-                    for lst in ls_data:
-                        msid = lst.get('recording_msid')
-                        meta = lst.get('track_metadata', {})
-                        artist = meta.get('artist_name')
-                        title = meta.get('track_name')
-                        if msid and artist and title:
-                            msid_map[msid] = (artist, title)
-                            
-                    max_ts = ls_data[-1].get('listened_at') - 1
-                
-                loved = []
-                for msid in loved_msids:
-                    if msid in msid_map:
-                        loved.append(msid_map[msid])
-                        
-                return loved
+            r = requests.get(url, headers=headers, params=params, timeout=10)
+            if r.status_code != 200:
+                logger.error(f"Error fetching feedback from ListenBrainz: {r.status_code} - {r.text}")
+                return []
+
+            data = r.json() or {}
+            feedbacks = data.get('feedback') or []
+
+            loved_msids = []
+            newly_resolved = {}
+
+            for item in feedbacks:
+                if not item:
+                    continue
+                if item.get('score') == 1:
+                    msid = item.get('recording_msid')
+                    if msid:
+                        loved_msids.append(msid)
+                    # Check if feedback directly supplied track metadata
+                    meta = item.get('track_metadata') or {}
+                    art = meta.get('artist_name')
+                    tit = meta.get('track_name')
+                    if msid and art and tit:
+                        newly_resolved[msid] = (art, tit)
+
+            if not loved_msids:
+                return []
+
+            # Step 1: Query SQLite msid_cache for already resolved MSIDs
+            msid_map = {}
+            with get_db_connection(self.db_path) as conn:
+                ensure_db_indexes(conn)
+                cursor = conn.cursor()
+                chunk_size = 500
+                for i in range(0, len(loved_msids), chunk_size):
+                    chunk = loved_msids[i:i + chunk_size]
+                    placeholders = ','.join('?' for _ in chunk)
+                    cursor.execute(
+                        f"SELECT msid, artist, title FROM msid_cache WHERE msid IN ({placeholders})",
+                        chunk
+                    )
+                    for row in cursor.fetchall():
+                        msid_map[row[0]] = (row[1], row[2])
+
+            msid_map.update(newly_resolved)
+            unresolved_msids = [m for m in loved_msids if m not in msid_map]
+
+            # Step 2: Resolve missing MSIDs if any
+            if unresolved_msids:
+                logger.info(f"Resolving {len(unresolved_msids)} uncached loved MSIDs...")
+
+                # Option A: ListenBrainz metadata lookup API
+                try:
+                    lookup_url = f"{self.api_url}/metadata/lookup/"
+                    lookup_headers = {}
+                    if self.lb_token:
+                        lookup_headers['Authorization'] = f"Token {self.lb_token}"
+                    for i in range(0, len(unresolved_msids), 50):
+                        chunk = unresolved_msids[i:i + 50]
+                        r_lookup = requests.get(lookup_url, headers=lookup_headers, params={'recording_msids': chunk}, timeout=10)
+                        if r_lookup.status_code == 200:
+                            l_data = r_lookup.json() or {}
+                            results = l_data.get('results') or l_data.get('payload', {}).get('results') or []
+                            for res in results:
+                                res_msid = res.get('recording_msid')
+                                meta = res.get('track_metadata') or res
+                                art = meta.get('artist_name')
+                                tit = meta.get('track_name') or meta.get('recording_name')
+                                if res_msid and art and tit:
+                                    newly_resolved[res_msid] = (art, tit)
+                except Exception as e:
+                    logger.debug(f"Metadata lookup API unavailable or failed: {e}")
+
+                remaining_unresolved = set(m for m in unresolved_msids if m not in newly_resolved)
+
+                # Option B: Fallback to fetching recent scrobbles to resolve missing MSIDs
+                if remaining_unresolved:
+                    url_ls = f"{self.api_url}/user/{self.lb_user}/listens"
+                    headers_ls = {}
+                    if self.lb_token:
+                        headers_ls['Authorization'] = f"Token {self.lb_token}"
+                    max_ts = None
+                    for _ in range(10): # Fetch up to 1000 scrobbles
+                        p = {"count": 100}
+                        if max_ts:
+                            p["max_ts"] = max_ts
+                        r_ls = requests.get(url_ls, headers=headers_ls, params=p, timeout=10)
+                        if r_ls.status_code != 200:
+                            break
+                        ls_data = r_ls.json().get('payload', {}).get('listens', [])
+                        if not ls_data:
+                            break
+
+                        for lst in ls_data:
+                            msid = lst.get('recording_msid')
+                            meta = lst.get('track_metadata', {})
+                            artist = meta.get('artist_name')
+                            title = meta.get('track_name')
+                            if msid and artist and title:
+                                newly_resolved[msid] = (artist, title)
+                                remaining_unresolved.discard(msid)
+
+                        if not remaining_unresolved:
+                            break
+
+                        max_ts = ls_data[-1].get('listened_at') - 1
+                        time.sleep(0.3)
+
+            # Step 3: Insert newly resolved MSIDs into msid_cache
+            if newly_resolved:
+                with get_db_connection(self.db_path) as conn:
+                    cursor = conn.cursor()
+                    cursor.executemany(
+                        "INSERT OR REPLACE INTO msid_cache (msid, artist, title) VALUES (?, ?, ?)",
+                        [(m, art, tit) for m, (art, tit) in newly_resolved.items()]
+                    )
+                    conn.commit()
+                msid_map.update(newly_resolved)
+
+            # Step 4: Return resolved loved tracks
+            seen = set()
+            loved = []
+            for msid in loved_msids:
+                if msid in msid_map:
+                    pair = msid_map[msid]
+                    if pair not in seen:
+                        seen.add(pair)
+                        loved.append(pair)
+
+            return loved
+
         except Exception as e:
             logger.error(f"Error fetching loved tracks: {e}")
-        return []
+            return []
+
 
     def process_listens(self) -> tuple[int, list]:
         """
@@ -248,6 +346,7 @@ class TelemetryEngine:
                 )
             """)
                 
+            msid_cache_pairs = []
             for lst in listens:
                 ts = lst.get('listened_at')
                 if ts > latest_ts:
@@ -256,6 +355,9 @@ class TelemetryEngine:
                 track_meta = lst.get('track_metadata', {})
                 l_artist = track_meta.get('artist_name', '')
                 l_title = track_meta.get('track_name', '')
+                msid = lst.get('recording_msid')
+                if msid and l_artist and l_title:
+                    msid_cache_pairs.append((msid, l_artist, l_title))
                 
                 if not l_artist or not l_title:
                     continue
@@ -308,11 +410,19 @@ class TelemetryEngine:
                     """, (matched_id, dt))
                     processed_count += 1
             
+            # Persist scrobbles to msid_cache
+            if msid_cache_pairs:
+                cursor.executemany(
+                    "INSERT OR REPLACE INTO msid_cache (msid, artist, title) VALUES (?, ?, ?)",
+                    msid_cache_pairs
+                )
+
             # Update timestamp for next execution
             if latest_ts > min_ts:
                 cursor.execute("INSERT OR REPLACE INTO system_metadata (key, value) VALUES ('last_listenbrainz_sync', ?)", (str(latest_ts),))
                 
             conn.commit()
+
             
         return processed_count, orphan_scrobbles
         

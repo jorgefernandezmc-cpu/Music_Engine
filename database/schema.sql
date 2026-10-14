@@ -53,3 +53,13 @@ CREATE INDEX IF NOT EXISTS idx_tracks_play_count ON tracks(play_count);
 
 CREATE INDEX IF NOT EXISTS idx_listen_events_track_id ON listen_events(track_id);
 CREATE INDEX IF NOT EXISTS idx_listen_events_listened_at ON listen_events(listened_at);
+
+CREATE TABLE IF NOT EXISTS msid_cache (
+    msid TEXT PRIMARY KEY,
+    artist TEXT NOT NULL,
+    title TEXT NOT NULL,
+    resolved_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_msid_cache ON msid_cache(msid);
+

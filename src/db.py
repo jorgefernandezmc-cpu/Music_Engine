@@ -43,6 +43,16 @@ def ensure_db_indexes(conn: sqlite3.Connection) -> None:
         )
     """)
     
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS msid_cache (
+            msid TEXT PRIMARY KEY,
+            artist TEXT NOT NULL,
+            title TEXT NOT NULL,
+            resolved_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_msid_cache ON msid_cache(msid);")
+    
     # Indices on tracks
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_tracks_status ON tracks(status);")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_tracks_status_perm ON tracks(status, is_permanent);")

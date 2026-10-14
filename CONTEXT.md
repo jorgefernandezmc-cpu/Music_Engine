@@ -215,6 +215,14 @@ Scrobbles from ListenBrainz that didn't match any local track (listened on other
 - `artist` (TEXT), `title` (TEXT).
 - `attempts` (INTEGER DEFAULT 0): Retry counter. Purged after exceeding 2 failed attempts.
 
+### `msid_cache` Table
+Persistent cache mapping MessyBrainz recording identifiers (MSIDs) to verified track metadata:
+- `msid` (TEXT PRIMARY KEY): Unique MessyBrainz recording identifier.
+- `artist` (TEXT NOT NULL): Normalized primary artist name.
+- `title` (TEXT NOT NULL): Track title.
+- `resolved_at` (DATETIME DEFAULT CURRENT_TIMESTAMP): Timestamp when the entry was cached.
+
+
 ---
 
 ## 5. System Modules and Components
