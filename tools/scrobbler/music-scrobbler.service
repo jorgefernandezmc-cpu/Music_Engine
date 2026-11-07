@@ -6,7 +6,7 @@ After=default.target
 [Service]
 Type=simple
 WorkingDirectory=%h/Documentos/Proyectos/Music_Engine
-ExecStart=%h/Documentos/Proyectos/Music_Engine/.venv/bin/python main.py scrobbler
+ExecStart=%h/Documentos/Proyectos/Music_Engine/.venv/bin/python tools/scrobbler/mpris_scrobbler.py
 Restart=always
 RestartSec=5
 StandardOutput=journal
