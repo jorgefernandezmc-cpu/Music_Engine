@@ -98,6 +98,7 @@ La documentación completa está organizada modularmente en el directorio [`docs
 | 📲 **[Ecosistema Móvil y Sincronización](docs/es/mobile-and-sync.md)** | Configuración de Syncthing, `.stignore`, reproductores Lune/Auxio, ListenBrainz y Pano Scrobbler. | *Usuarios de Android* |
 | ⏰ **[Automatización en Segundo Plano](docs/es/automation.md)** | Servicios y temporizadores de usuario de `systemd`, modo *lingering* y gestión de logs. | *Sysadmins, Self-hosters* |
 | 🎶 **[Metadatos, Géneros y Letras](docs/es/metadata-and-lyrics.md)** | Cascada de letras `.lrc`, etiquetas Vorbis, clasificación de géneros por IA y reparación de álbumes. | *Audiófilos* |
+| 🎧 **[Scrobbler MPRIS Offline](tools/scrobbler/README.md)** | Demonio en segundo plano con cola SQLite persistente (cero pérdidas sin conexión). | *Oyentes en Linux* |
 | 💾 **[Copias de Seguridad y Migración](docs/es/backup-and-migration.md)** | Instantáneas SQLite en caliente, deduplicación SHA-256, paquetes portables y reescritura de rutas. | *Todos los usuarios* |
 | ❓ **[Solución de Problemas y Preguntas Frecuentes](docs/es/troubleshooting.md)** | Diagnósticos, errores frecuentes (bloqueos, API keys, ffmpeg) y soluciones probadas. | *Cualquier incidencia* |
 | 🏗️ **[Arquitectura e Internos del Sistema](docs/es/architecture.md)** | Guía técnica profunda: máquina de estados, esquema SQLite, catálogo de módulos y directrices. | *Colaboradores, Desarrolladores* |

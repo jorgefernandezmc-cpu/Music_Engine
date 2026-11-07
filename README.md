@@ -98,6 +98,7 @@ The full documentation is modularly organized in the [`docs/`](docs/) directory:
 | 📲 **[Mobile Ecosystem & Sync](docs/en/mobile-and-sync.md)** | Syncthing setup, `.stignore`, Lune/Auxio players, ListenBrainz & Pano Scrobbler. | *Android users* |
 | ⏰ **[Background Automation](docs/en/automation.md)** | Linux `systemd --user` service and timer setup, lingering, and automated logs. | *Sysadmins, Self-hosters* |
 | 🎶 **[Metadata, Genres & Lyrics](docs/en/metadata-and-lyrics.md)** | Synced `.lrc` cascade, Vorbis tags, Gemini genre classification & album repairs. | *Audiophiles* |
+| 🎧 **[MPRIS Offline Scrobbler](tools/scrobbler/README.md)** | Background Linux scrobbler with persistent SQLite queue (zero scrobbles lost offline). | *Linux listeners* |
 | 💾 **[Backups & PC Migration](docs/en/backup-and-migration.md)** | Hot SQLite snapshots, SHA-256 deduplication, portable bundles & path rebasing. | *All users* |
 | ❓ **[Troubleshooting & FAQ](docs/en/troubleshooting.md)** | Diagnostic commands, common errors (locks, API keys, ffmpeg) and solutions. | *Anyone encountering issues* |
 | 🏗️ **[Architecture & Internals](docs/en/architecture.md)** | Deep technical guide: state machine, SQLite schema, module catalog & guidelines. | *Contributors, Developers* |

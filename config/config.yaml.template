@@ -201,7 +201,28 @@ backup:
   include_aux_files: true
 
 # ------------------------------------------------------------------------------
-# 13. SYSTEM LANGUAGE & LOCALIZATION
+# 13. MPRIS SCROBBLER DAEMON (OFFLINE PERSISTENT QUEUE)
+# ------------------------------------------------------------------------------
+scrobbler:
+  # Enable MPRIS background scrobbler daemon:
+  enabled: true
+
+  # Minimum listening duration (seconds) required before qualifying as a scrobble:
+  min_play_time: 45
+
+  # Percentage of song duration required (0.50 = 50%):
+  completion_ratio: 0.50
+
+  # Whitelist of player bus names (supports regex).
+  # Use [] or ["*"] to scrobble from all players, or filter to specific players:
+  player_whitelist:
+    - "waveflow"
+
+  # Path to the persistent SQLite queue file:
+  queue_db: "data/scrobbler_queue.sqlite"
+
+# ------------------------------------------------------------------------------
+# 14. SYSTEM LANGUAGE & LOCALIZATION
 # ------------------------------------------------------------------------------
 system:
   # Language for user-facing elements (requests mailbox guide header & desktop notifications)

@@ -1,0 +1,16 @@
+[Unit]
+Description=Music Engine MPRIS Offline Scrobbler Daemon
+Documentation=https://github.com/aitorgallego/Music_Engine
+After=default.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Documentos/Proyectos/Music_Engine
+ExecStart=%h/Documentos/Proyectos/Music_Engine/.venv/bin/python main.py scrobbler
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

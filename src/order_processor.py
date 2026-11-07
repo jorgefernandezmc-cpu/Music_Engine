@@ -1005,6 +1005,39 @@ class OrderProcessor:
         return True, f"'{r_artist} - {r_title}' queued to {dest}"
 
 
+    @staticmethod
+    def _reassign_track_id(cursor, old_id: str, new_id: str, target_file_path: str = None, album: str = None):
+        """
+        Safely replaces or reassigns a track's ID in SQLite without violating foreign key constraints
+        in referencing tables such as listen_events.
+        """
+        cursor.execute("SELECT id FROM tracks WHERE id = ?", (new_id,))
+        existing = cursor.fetchone()
+        if existing:
+            cursor.execute("UPDATE listen_events SET track_id = ? WHERE track_id = ?", (new_id, old_id))
+            cursor.execute("DELETE FROM tracks WHERE id = ?", (old_id,))
+            if target_file_path is not None:
+                cursor.execute("UPDATE tracks SET status = 'PENDING', file_path = ? WHERE id = ?", (target_file_path, new_id))
+            else:
+                cursor.execute("UPDATE tracks SET status = 'PENDING' WHERE id = ?", (new_id,))
+        else:
+            cursor.execute("PRAGMA table_info(tracks)")
+            cols = [col[1] for col in cursor.fetchall() if col[1] != 'id']
+            cols_str = ", ".join(cols)
+            cursor.execute(f"INSERT INTO tracks (id, {cols_str}) SELECT ?, {cols_str} FROM tracks WHERE id = ?", (new_id, old_id))
+            cursor.execute("UPDATE listen_events SET track_id = ? WHERE track_id = ?", (new_id, old_id))
+            cursor.execute("DELETE FROM tracks WHERE id = ?", (old_id,))
+            updates = ["status = 'PENDING'"]
+            params = []
+            if target_file_path is not None:
+                updates.append("file_path = ?")
+                params.append(target_file_path)
+            if album is not None:
+                updates.append("album = ?")
+                params.append(album)
+            params.append(new_id)
+            cursor.execute(f"UPDATE tracks SET {', '.join(updates)} WHERE id = ?", tuple(params))
+
     def process_fix_track(self, conn, fix_query: str) -> tuple[bool, str]:
         """
         Repairs a questionable track by searching for its official studio version
@@ -1057,13 +1090,7 @@ class OrderProcessor:
             _remove_from_download_archive(c_id)
             _remove_from_download_archive(manual_vid)
 
-            cursor.execute("SELECT id FROM tracks WHERE id = ?", (manual_vid,))
-            existing_target = cursor.fetchone()
-            if existing_target:
-                cursor.execute("DELETE FROM tracks WHERE id = ?", (c_id,))
-                cursor.execute("UPDATE tracks SET status = 'PENDING', file_path = ? WHERE id = ?", (c_fpath, manual_vid))
-            else:
-                cursor.execute("UPDATE tracks SET id = ?, status = 'PENDING' WHERE id = ?", (manual_vid, c_id))
+            self._reassign_track_id(cursor, c_id, manual_vid, target_file_path=c_fpath)
 
             conn.commit()
             logger.info(f"Track repaired via manual URL: '{c_artist} - {c_title}' -> ID: {manual_vid}")
@@ -1099,12 +1126,7 @@ class OrderProcessor:
             _remove_from_download_archive(c_id)
             _remove_from_download_archive(new_id)
 
-            cursor.execute("SELECT id FROM tracks WHERE id = ?", (new_id,))
-            if cursor.fetchone():
-                cursor.execute("DELETE FROM tracks WHERE id = ?", (c_id,))
-                cursor.execute("UPDATE tracks SET status = 'PENDING', file_path = ? WHERE id = ?", (c_fpath, new_id))
-            else:
-                cursor.execute("UPDATE tracks SET id = ?, status = 'PENDING' WHERE id = ?", (new_id, c_id))
+            self._reassign_track_id(cursor, c_id, new_id, target_file_path=c_fpath)
 
             conn.commit()
             logger.info(f"Track auto-repaired: '{c_artist} - {c_title}' -> New ID: {new_id}")

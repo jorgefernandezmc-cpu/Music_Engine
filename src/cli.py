@@ -337,6 +337,10 @@ def main():
     norm_p.add_argument("--all", action="store_true", help="Process entire library without limit")
     norm_p.add_argument("--force", action="store_true", help="Recalculate even tracks with existing ReplayGain tags")
 
+    scrob_p = subparsers.add_parser("scrobbler", help="Runs or manages MPRIS offline-resilient scrobbler daemon")
+    scrob_p.add_argument("--status", action="store_true", help="Display pending offline scrobbles in queue")
+    scrob_p.add_argument("--flush", action="store_true", help="Flush pending queue immediately to ListenBrainz")
+
     args = parser.parse_args()
 
 
@@ -454,16 +458,8 @@ def main():
                 
                 if fixed.get('fixed') and fixed.get('id') != t_id:
                     new_vid = fixed['id']
-                    cursor.execute("SELECT id FROM tracks WHERE id = ?", (new_vid,))
-                    existing = cursor.fetchone()
-                    if existing:
-                        cursor.execute("DELETE FROM tracks WHERE id = ?", (t_id,))
-                    else:
-                        cursor.execute("""
-                            UPDATE tracks 
-                            SET id = ?, album = ? 
-                            WHERE id = ?
-                        """, (new_vid, fixed.get('album', t_album), t_id))
+                    from src.order_processor import OrderProcessor
+                    OrderProcessor._reassign_track_id(cursor, t_id, new_vid, album=fixed.get('album', t_album))
                     fixed_count += 1
                     print(f"  [✓] Fixed via {fixed.get('method')}: New ID -> {new_vid}")
                 else:
@@ -593,6 +589,17 @@ def main():
         print(f" - Tagged / R128:  {stats['tagged']}")
         print(f" - Skipped (done): {stats['skipped']}")
         print(f" - Failed:         {stats['failed']}")
+    elif args.command == "scrobbler":
+        from tools.scrobbler.mpris_scrobbler import MprisScrobbler
+        scrob = MprisScrobbler(config_path=config_path)
+        if args.status:
+            cnt = scrob.get_pending_count()
+            print(f"Pending scrobbles in offline queue: {cnt}")
+        elif args.flush:
+            ok, n = scrob.flush_queue()
+            print(f"Flush completed: {n} scrobbles submitted (Success: {ok})")
+        else:
+            scrob.run()
     else:
         parser.print_help()
 

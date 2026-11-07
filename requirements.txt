@@ -11,3 +11,4 @@ pyyaml>=6.0.1
 pytest>=8.2.2
 pytest-mock>=3.14.0
 syncedlyrics>=1.0.1
+jeepney>=0.8.0
